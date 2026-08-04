@@ -61,4 +61,4 @@ export const GAME_CONFIG = {
       radius: 1.35
     }
   }
-} as const;
+};
