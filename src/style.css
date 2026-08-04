@@ -21,33 +21,47 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
   gap: 18px;
   text-shadow: 0 2px 8px #000;
 }
-.hud-top { top: 24px; }
+.hud-top { top: 24px; align-items: flex-start; }
 .hud-bottom { bottom: 22px; font-size: 13px; color: #d8cabd; }
+.vitals { display: grid; gap: 7px; }
 
-.health-shell {
+.health-shell, .experience-shell {
   position: relative;
   width: min(360px, 48vw);
-  height: 22px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,.22);
   border-radius: 999px;
   background: rgba(12,14,18,.78);
   box-shadow: 0 10px 35px rgba(0,0,0,.35);
 }
-.health-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #8d2319, #dc5b2e);
-  transition: width .15s ease-out;
-}
-.health-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-.wave-text, .cooldown-text, .controls {
+.health-shell { height: 22px; }
+.experience-shell { height: 15px; }
+.health-fill, .experience-fill { height: 100%; width: 100%; transition: width .15s ease-out; }
+.health-fill { background: linear-gradient(90deg, #8d2319, #dc5b2e); }
+.experience-fill { background: linear-gradient(90deg, #1f6572, #44b8b5); }
+.health-text, .experience-text { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; }
+.health-text { font-size: 12px; }
+.experience-text { font-size: 9px; letter-spacing: .04em; }
+
+.room-text, .cooldown-text, .controls, .run-panel {
   padding: 9px 13px;
   border: 1px solid rgba(255,255,255,.12);
   border-radius: 10px;
   background: rgba(10,13,17,.66);
   backdrop-filter: blur(8px);
 }
+.run-panel {
+  position: absolute;
+  top: 83px;
+  left: 28px;
+  display: grid;
+  gap: 5px;
+  max-width: min(520px, 70vw);
+  color: #cfc3b8;
+  font-size: 11px;
+  text-shadow: 0 2px 8px #000;
+}
+.relic-text { color: #ffd1a3; }
 
 .message {
   position: absolute;
@@ -84,7 +98,7 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
 .panel p { color: #c9b9aa; line-height: 1.7; }
 .eyebrow { margin: 0; color: #e8793d !important; text-transform: uppercase; letter-spacing: .22em; font-size: 12px; }
 .upgrade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.upgrade-card, .primary-button {
+.upgrade-card, .primary-button, .secondary-button {
   color: inherit;
   border: 1px solid rgba(255,255,255,.14);
   border-radius: 14px;
@@ -92,16 +106,25 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
   cursor: pointer;
   transition: transform .16s ease, border-color .16s ease, background .16s ease;
 }
-.upgrade-card { min-height: 160px; padding: 22px; text-align: left; }
+.upgrade-card { min-height: 180px; padding: 22px; text-align: left; }
+.upgrade-card small { display: block; margin-bottom: 8px; color: #d48352; letter-spacing: .08em; }
 .upgrade-card strong { display: block; margin-bottom: 12px; color: #ffd1a3; font-size: 21px; }
 .upgrade-card span { color: #cfc3b8; line-height: 1.6; }
-.upgrade-card:hover, .primary-button:hover { transform: translateY(-3px); border-color: rgba(255,143,74,.72); background: rgba(255,111,46,.1); }
-.primary-button { padding: 13px 24px; background: #9c3f22; font-weight: 700; }
-.result-panel { max-width: 640px; text-align: center; }
+.relic-card strong { color: #d6c2ff; }
+.upgrade-card:hover, .primary-button:hover, .secondary-button:hover { transform: translateY(-3px); border-color: rgba(255,143,74,.72); background: rgba(255,111,46,.1); }
+.primary-button, .secondary-button { padding: 13px 24px; font-weight: 700; }
+.primary-button { background: #9c3f22; }
+.secondary-button { background: rgba(255,255,255,.05); }
+.result-panel { max-width: 680px; text-align: center; }
+.compact-panel { max-width: 560px; }
+.result-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.profile-line { font-size: 13px; opacity: .78; }
 
 @media (max-width: 720px) {
   .hud-top, .hud-bottom { left: 12px; right: 12px; }
-  .wave-text, .controls { display: none; }
+  .room-text, .controls { display: none; }
+  .run-panel { left: 12px; top: 80px; max-width: 80vw; }
+  .message { top: 132px; width: 90%; text-align: center; }
   .upgrade-grid { grid-template-columns: 1fr; }
   .upgrade-card { min-height: auto; }
   .panel { padding: 24px; }

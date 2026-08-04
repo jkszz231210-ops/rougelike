@@ -1,3 +1,5 @@
+export type EnemyKind = 'melee' | 'ranged' | 'elite' | 'boss';
+
 export const GAME_CONFIG = {
   arenaHalfSize: 11,
   player: {
@@ -13,21 +15,50 @@ export const GAME_CONFIG = {
     dashCooldown: 1.2,
     dashInvulnerability: 0.22
   },
-  waves: [
-    { melee: 5, ranged: 0, boss: false },
-    { melee: 4, ranged: 2, boss: false },
-    { melee: 0, ranged: 0, boss: true }
-  ]
+  progression: {
+    baseExperience: 58,
+    experienceGrowth: 34
+  },
+  enemies: {
+    melee: {
+      health: 72,
+      speed: 2.9,
+      attackDistance: 1.35,
+      attackCooldown: 1.2,
+      damage: 14,
+      experience: 18,
+      coins: 5,
+      radius: 0.7
+    },
+    ranged: {
+      health: 58,
+      speed: 2.4,
+      attackDistance: 8.8,
+      attackCooldown: 1.55,
+      damage: 12,
+      experience: 22,
+      coins: 7,
+      radius: 0.65
+    },
+    elite: {
+      health: 230,
+      speed: 2.65,
+      attackDistance: 1.75,
+      attackCooldown: 0.95,
+      damage: 20,
+      experience: 68,
+      coins: 24,
+      radius: 1.0
+    },
+    boss: {
+      health: 760,
+      speed: 2.2,
+      attackDistance: 2.2,
+      attackCooldown: 1.05,
+      damage: 23,
+      experience: 120,
+      coins: 60,
+      radius: 1.35
+    }
+  }
 } as const;
-
-export type UpgradeId = 'damage' | 'vitality' | 'haste';
-
-export const UPGRADES: ReadonlyArray<{
-  id: UpgradeId;
-  name: string;
-  description: string;
-}> = [
-  { id: 'damage', name: '灼锋', description: '普通攻击与技能伤害提高 25%' },
-  { id: 'vitality', name: '余火护体', description: '最大生命提高 30，并立即恢复 30' },
-  { id: 'haste', name: '疾行余烬', description: '移动速度提高 15%，技能冷却缩短 15%' }
-];

@@ -1,19 +1,41 @@
-import type { UpgradeId } from '../game/config';
+import type { RelicDefinition, RelicId, UpgradeDefinition, UpgradeId } from '../game/content';
+import type { ProfileData } from './profile';
 
 export interface HudSnapshot {
   health: number;
   maxHealth: number;
-  wave: number;
+  level: number;
+  experience: number;
+  experienceToNext: number;
+  room: number;
+  roomCount: number;
+  roomTitle: string;
   enemyCount: number;
+  coins: number;
+  relics: readonly string[];
+  seed: string;
   skillCooldown: number;
   dashCooldown: number;
   message: string;
 }
 
+export interface ResultSummary {
+  seed: string;
+  room: number;
+  kills: number;
+  level: number;
+  coins: number;
+  profile: Readonly<ProfileData>;
+}
+
 export class Hud {
   private readonly healthFill: HTMLElement;
   private readonly healthText: HTMLElement;
-  private readonly waveText: HTMLElement;
+  private readonly experienceFill: HTMLElement;
+  private readonly experienceText: HTMLElement;
+  private readonly roomText: HTMLElement;
+  private readonly runText: HTMLElement;
+  private readonly relicText: HTMLElement;
   private readonly cooldownText: HTMLElement;
   private readonly message: HTMLElement;
   private readonly modal: HTMLElement;
@@ -21,8 +43,15 @@ export class Hud {
   constructor(private readonly root: HTMLElement) {
     this.root.innerHTML = `
       <div class="hud-top">
-        <div class="health-shell"><div class="health-fill"></div><span class="health-text"></span></div>
-        <div class="wave-text"></div>
+        <div class="vitals">
+          <div class="health-shell"><div class="health-fill"></div><span class="health-text"></span></div>
+          <div class="experience-shell"><div class="experience-fill"></div><span class="experience-text"></span></div>
+        </div>
+        <div class="room-text"></div>
+      </div>
+      <div class="run-panel">
+        <div class="run-text"></div>
+        <div class="relic-text"></div>
       </div>
       <div class="hud-bottom">
         <div class="controls">WASD 移动 · 左键攻击 · 右键技能 · Space 闪避</div>
@@ -34,23 +63,32 @@ export class Hud {
 
     this.healthFill = this.require('.health-fill');
     this.healthText = this.require('.health-text');
-    this.waveText = this.require('.wave-text');
+    this.experienceFill = this.require('.experience-fill');
+    this.experienceText = this.require('.experience-text');
+    this.roomText = this.require('.room-text');
+    this.runText = this.require('.run-text');
+    this.relicText = this.require('.relic-text');
     this.cooldownText = this.require('.cooldown-text');
     this.message = this.require('.message');
     this.modal = this.require('.modal');
   }
 
   update(snapshot: HudSnapshot): void {
-    const ratio = Math.max(0, snapshot.health / snapshot.maxHealth);
-    this.healthFill.style.width = `${ratio * 100}%`;
+    const healthRatio = Math.max(0, snapshot.health / snapshot.maxHealth);
+    const experienceRatio = Math.max(0, snapshot.experience / snapshot.experienceToNext);
+    this.healthFill.style.width = `${healthRatio * 100}%`;
     this.healthText.textContent = `${Math.ceil(snapshot.health)} / ${snapshot.maxHealth}`;
-    this.waveText.textContent = `灰烬荒原 · 波次 ${snapshot.wave}/3 · 敌人 ${snapshot.enemyCount}`;
+    this.experienceFill.style.width = `${Math.min(1, experienceRatio) * 100}%`;
+    this.experienceText.textContent = `等级 ${snapshot.level} · ${snapshot.experience}/${snapshot.experienceToNext}`;
+    this.roomText.textContent = `第 ${snapshot.room}/${snapshot.roomCount} 房 · ${snapshot.roomTitle} · 敌人 ${snapshot.enemyCount}`;
+    this.runText.textContent = `金币 ${snapshot.coins} · 种子 ${snapshot.seed}`;
+    this.relicText.textContent = snapshot.relics.length > 0 ? `遗物：${snapshot.relics.join('、')}` : '遗物：尚未获得';
     this.cooldownText.textContent = `技能 ${this.formatCooldown(snapshot.skillCooldown)} · 闪避 ${this.formatCooldown(snapshot.dashCooldown)}`;
     this.message.textContent = snapshot.message;
   }
 
   showUpgrade(
-    choices: ReadonlyArray<{ id: UpgradeId; name: string; description: string }>,
+    choices: ReadonlyArray<{ definition: UpgradeDefinition; currentLevel: number }>,
     onSelect: (id: UpgradeId) => void
   ): void {
     this.modal.classList.remove('hidden');
@@ -59,10 +97,11 @@ export class Hud {
         <p class="eyebrow">命数偏转</p>
         <h1>选择一项强化</h1>
         <div class="upgrade-grid">
-          ${choices.map((choice) => `
-            <button class="upgrade-card" data-upgrade="${choice.id}">
-              <strong>${choice.name}</strong>
-              <span>${choice.description}</span>
+          ${choices.map(({ definition, currentLevel }) => `
+            <button class="upgrade-card" data-upgrade="${definition.id}">
+              <small>${definition.rarity} · Lv.${currentLevel + 1}/${definition.maxLevel}</small>
+              <strong>${definition.name}</strong>
+              <span>${definition.description}</span>
             </button>
           `).join('')}
         </div>
@@ -77,17 +116,69 @@ export class Hud {
     });
   }
 
-  showResult(victory: boolean, onRestart: () => void): void {
+  showRelic(choices: readonly RelicDefinition[], onSelect: (id: RelicId) => void): void {
+    this.modal.classList.remove('hidden');
+    this.modal.innerHTML = `
+      <section class="panel">
+        <p class="eyebrow">遗物回响</p>
+        <h1>选择一件遗物</h1>
+        <div class="upgrade-grid">
+          ${choices.map((relic) => `
+            <button class="upgrade-card relic-card" data-relic="${relic.id}">
+              <small>单局遗物</small>
+              <strong>${relic.name}</strong>
+              <span>${relic.description}</span>
+            </button>
+          `).join('')}
+        </div>
+      </section>
+    `;
+
+    this.modal.querySelectorAll<HTMLButtonElement>('[data-relic]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.hideModal();
+        onSelect(button.dataset.relic as RelicId);
+      }, { once: true });
+    });
+  }
+
+  showRoomComplete(title: string, detail: string, onContinue: () => void): void {
+    this.modal.classList.remove('hidden');
+    this.modal.innerHTML = `
+      <section class="panel result-panel compact-panel">
+        <p class="eyebrow">房间肃清</p>
+        <h1>${title}</h1>
+        <p>${detail}</p>
+        <button class="primary-button" id="continue-button">继续前进</button>
+      </section>
+    `;
+    this.modal.querySelector<HTMLButtonElement>('#continue-button')?.addEventListener('click', () => {
+      this.hideModal();
+      onContinue();
+    }, { once: true });
+  }
+
+  showResult(
+    victory: boolean,
+    summary: ResultSummary,
+    onRestartSameSeed: () => void,
+    onNewSeed: () => void
+  ): void {
     this.modal.classList.remove('hidden');
     this.modal.innerHTML = `
       <section class="panel result-panel">
         <p class="eyebrow">${victory ? '灰烬暂熄' : '命数断裂'}</p>
-        <h1>${victory ? '第一关已通关' : '你倒在了荒原'}</h1>
-        <p>${victory ? '第一关竖切完成。后续将加入遗物、伙伴和五关流程。' : '重新进入荒原，尝试不同的走位与强化。'}</p>
-        <button class="primary-button" id="restart-button">重新开始</button>
+        <h1>${victory ? '灰烬荒原已通关' : '你倒在了荒原'}</h1>
+        <p>种子 ${summary.seed} · 房间 ${summary.room}/5 · 等级 ${summary.level} · 击败 ${summary.kills} · 金币 ${summary.coins}</p>
+        <p class="profile-line">累计游玩 ${summary.profile.runs} 局 · 通关 ${summary.profile.victories} 次 · 最远房间 ${summary.profile.bestRoom}</p>
+        <div class="result-actions">
+          <button class="primary-button" id="same-seed-button">同种子重开</button>
+          <button class="secondary-button" id="new-seed-button">生成新种子</button>
+        </div>
       </section>
     `;
-    this.modal.querySelector<HTMLButtonElement>('#restart-button')?.addEventListener('click', onRestart, { once: true });
+    this.modal.querySelector<HTMLButtonElement>('#same-seed-button')?.addEventListener('click', onRestartSameSeed, { once: true });
+    this.modal.querySelector<HTMLButtonElement>('#new-seed-button')?.addEventListener('click', onNewSeed, { once: true });
   }
 
   hideModal(): void {
