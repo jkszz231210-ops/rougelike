@@ -13,6 +13,8 @@ export interface HudSnapshot {
   enemyCount: number;
   coins: number;
   relics: readonly string[];
+  companions: readonly string[];
+  synergy: number;
   seed: string;
   skillCooldown: number;
   dashCooldown: number;
@@ -36,6 +38,9 @@ export class Hud {
   private readonly roomText: HTMLElement;
   private readonly runText: HTMLElement;
   private readonly relicText: HTMLElement;
+  private readonly companionText: HTMLElement;
+  private readonly synergyFill: HTMLElement;
+  private readonly synergyText: HTMLElement;
   private readonly cooldownText: HTMLElement;
   private readonly message: HTMLElement;
   private readonly modal: HTMLElement;
@@ -46,15 +51,17 @@ export class Hud {
         <div class="vitals">
           <div class="health-shell"><div class="health-fill"></div><span class="health-text"></span></div>
           <div class="experience-shell"><div class="experience-fill"></div><span class="experience-text"></span></div>
+          <div class="synergy-shell"><div class="synergy-fill"></div><span class="synergy-text"></span></div>
         </div>
         <div class="room-text"></div>
       </div>
       <div class="run-panel">
         <div class="run-text"></div>
+        <div class="companion-text"></div>
         <div class="relic-text"></div>
       </div>
       <div class="hud-bottom">
-        <div class="controls">WASD 移动 · 左键攻击 · 右键技能 · Space 闪避</div>
+        <div class="controls">WASD 移动 · 左键攻击 · 右键技能 · Space 闪避 · Q 伙伴协同</div>
         <div class="cooldown-text"></div>
       </div>
       <div class="message" aria-live="polite"></div>
@@ -68,6 +75,9 @@ export class Hud {
     this.roomText = this.require('.room-text');
     this.runText = this.require('.run-text');
     this.relicText = this.require('.relic-text');
+    this.companionText = this.require('.companion-text');
+    this.synergyFill = this.require('.synergy-fill');
+    this.synergyText = this.require('.synergy-text');
     this.cooldownText = this.require('.cooldown-text');
     this.message = this.require('.message');
     this.modal = this.require('.modal');
@@ -80,8 +90,15 @@ export class Hud {
     this.healthText.textContent = `${Math.ceil(snapshot.health)} / ${snapshot.maxHealth}`;
     this.experienceFill.style.width = `${Math.min(1, experienceRatio) * 100}%`;
     this.experienceText.textContent = `等级 ${snapshot.level} · ${snapshot.experience}/${snapshot.experienceToNext}`;
+    this.synergyFill.style.width = `${Math.min(100, snapshot.synergy)}%`;
+    this.synergyText.textContent = snapshot.companions.length === 0
+      ? '协同：等待伙伴'
+      : snapshot.synergy >= 100
+        ? '协同就绪 · 按 Q'
+        : `协同 ${Math.floor(snapshot.synergy)}%`;
     this.roomText.textContent = `第 ${snapshot.room}/${snapshot.roomCount} 房 · ${snapshot.roomTitle} · 敌人 ${snapshot.enemyCount}`;
     this.runText.textContent = `金币 ${snapshot.coins} · 种子 ${snapshot.seed}`;
+    this.companionText.textContent = snapshot.companions.length > 0 ? `伙伴：${snapshot.companions.join('、')}` : '伙伴：尚未解救';
     this.relicText.textContent = snapshot.relics.length > 0 ? `遗物：${snapshot.relics.join('、')}` : '遗物：尚未获得';
     this.cooldownText.textContent = `技能 ${this.formatCooldown(snapshot.skillCooldown)} · 闪避 ${this.formatCooldown(snapshot.dashCooldown)}`;
     this.message.textContent = snapshot.message;
