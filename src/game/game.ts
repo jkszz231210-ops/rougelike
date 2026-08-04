@@ -18,16 +18,16 @@ export class RogueliteGame {
   private projectiles: Projectile[] = [];
   private state: GameState = 'playing';
   private waveIndex = 0;
-  private health = GAME_CONFIG.player.maxHealth;
-  private maxHealth = GAME_CONFIG.player.maxHealth;
-  private attackPower = GAME_CONFIG.player.attackDamage;
-  private skillPower = GAME_CONFIG.player.skillDamage;
-  private moveSpeed = GAME_CONFIG.player.moveSpeed;
-  private skillCooldownScale = 1;
-  private attackTimer = 0;
-  private skillTimer = 0;
-  private dashTimer = 0;
-  private invulnerabilityTimer = 0;
+  private health: number = GAME_CONFIG.player.maxHealth;
+  private maxHealth: number = GAME_CONFIG.player.maxHealth;
+  private attackPower: number = GAME_CONFIG.player.attackDamage;
+  private skillPower: number = GAME_CONFIG.player.skillDamage;
+  private moveSpeed: number = GAME_CONFIG.player.moveSpeed;
+  private skillCooldownScale: number = 1;
+  private attackTimer: number = 0;
+  private skillTimer: number = 0;
+  private dashTimer: number = 0;
+  private invulnerabilityTimer: number = 0;
   private message = '清除灰烬荒原中的敌人';
 
   constructor(private readonly app: pc.Application, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
@@ -44,8 +44,14 @@ export class RogueliteGame {
     this.app.scene.ambientLight = new pc.Color(0.22, 0.24, 0.27);
     this.app.scene.exposure = 1.05;
 
-    const ground = createMaterial(new pc.Color(0.16, 0.17, 0.18));
-    createPrimitive(this.app, 'arena-ground', 'box', ground, new pc.Vec3(0, -0.35, 0), new pc.Vec3(24, 0.6, 24));
+    createPrimitive(
+      this.app,
+      'arena-ground',
+      'box',
+      createMaterial(new pc.Color(0.16, 0.17, 0.18)),
+      new pc.Vec3(0, -0.35, 0),
+      new pc.Vec3(24, 0.6, 24)
+    );
 
     const rim = createMaterial(new pc.Color(0.07, 0.08, 0.09), new pc.Color(0.08, 0.025, 0.01));
     const half = GAME_CONFIG.arenaHalfSize + 0.5;
@@ -53,20 +59,6 @@ export class RogueliteGame {
     createPrimitive(this.app, 'south-wall', 'box', rim, new pc.Vec3(0, 0.35, half), new pc.Vec3(24, 1.4, 0.5));
     createPrimitive(this.app, 'west-wall', 'box', rim, new pc.Vec3(-half, 0.35, 0), new pc.Vec3(0.5, 1.4, 24));
     createPrimitive(this.app, 'east-wall', 'box', rim, new pc.Vec3(half, 0.35, 0), new pc.Vec3(0.5, 1.4, 24));
-
-    for (let i = 0; i < 18; i += 1) {
-      const angle = (i / 18) * Math.PI * 2;
-      const radius = 8 + (i % 3);
-      const ember = createMaterial(new pc.Color(0.12, 0.08, 0.06), new pc.Color(0.28, 0.055, 0.008));
-      createPrimitive(
-        this.app,
-        `ember-${i}`,
-        'sphere',
-        ember,
-        new pc.Vec3(Math.cos(angle) * radius, 0.04, Math.sin(angle) * radius),
-        new pc.Vec3(0.12, 0.05, 0.12)
-      );
-    }
 
     const light = new pc.Entity('sun');
     light.addComponent('light', {
@@ -93,13 +85,25 @@ export class RogueliteGame {
   }
 
   private createPlayer(): pc.Entity {
-    const material = createMaterial(new pc.Color(0.14, 0.38, 0.43), new pc.Color(0.02, 0.16, 0.2));
-    return createPrimitive(this.app, 'player', 'capsule', material, new pc.Vec3(0, 0.95, 4), new pc.Vec3(1.05, 1.8, 1.05));
+    return createPrimitive(
+      this.app,
+      'player',
+      'capsule',
+      createMaterial(new pc.Color(0.14, 0.38, 0.43), new pc.Color(0.02, 0.16, 0.2)),
+      new pc.Vec3(0, 0.95, 4),
+      new pc.Vec3(1.05, 1.8, 1.05)
+    );
   }
 
   private createAimMarker(): pc.Entity {
-    const material = createMaterial(new pc.Color(0.8, 0.24, 0.05), new pc.Color(0.8, 0.12, 0.02));
-    return createPrimitive(this.app, 'aim-marker', 'cylinder', material, new pc.Vec3(0, 0.03, 0), new pc.Vec3(0.25, 0.03, 0.25));
+    return createPrimitive(
+      this.app,
+      'aim-marker',
+      'cylinder',
+      createMaterial(new pc.Color(0.8, 0.24, 0.05), new pc.Color(0.8, 0.12, 0.02)),
+      new pc.Vec3(0, 0.03, 0),
+      new pc.Vec3(0.25, 0.03, 0.25)
+    );
   }
 
   private update(dt: number): void {
@@ -128,7 +132,7 @@ export class RogueliteGame {
 
   private updatePlayer(dt: number): void {
     const movement = this.input.getMovement();
-    const position = this.player.getPosition();
+    const position = this.player.getPosition().clone();
 
     if (this.input.consumeDash() && this.dashTimer <= 0) {
       const dashDirection = movement.lengthSq() > 0 ? movement : this.getAimDirection();
@@ -141,9 +145,11 @@ export class RogueliteGame {
     }
 
     const half = GAME_CONFIG.arenaHalfSize - 0.7;
-    position.x = pc.math.clamp(position.x, -half, half);
-    position.z = pc.math.clamp(position.z, -half, half);
-    position.y = 0.95;
+    position.set(
+      pc.math.clamp(position.x, -half, half),
+      0.95,
+      pc.math.clamp(position.z, -half, half)
+    );
     this.player.setPosition(position);
 
     const aimPoint = this.input.getAimPoint(this.camera, 0.03);
@@ -157,7 +163,7 @@ export class RogueliteGame {
 
   private getAimDirection(): pc.Vec3 {
     const direction = this.aimMarker.getPosition().clone().sub(this.player.getPosition());
-    direction.y = 0;
+    direction.set(direction.x, 0, direction.z);
     if (direction.lengthSq() < 0.001) return new pc.Vec3(0, 0, -1);
     return direction.normalize();
   }
@@ -168,16 +174,14 @@ export class RogueliteGame {
     const range = skill ? GAME_CONFIG.player.skillRange : GAME_CONFIG.player.attackRange;
     const amount = skill ? this.skillPower : this.attackPower;
     const center = origin.clone().add(direction.clone().mulScalar(range * 0.58));
-
-    const material = createMaterial(
-      skill ? new pc.Color(0.85, 0.22, 0.03) : new pc.Color(0.48, 0.18, 0.04),
-      skill ? new pc.Color(1, 0.18, 0.015) : new pc.Color(0.7, 0.08, 0.01)
-    );
     const effect = createPrimitive(
       this.app,
       skill ? 'skill-effect' : 'attack-effect',
       'sphere',
-      material,
+      createMaterial(
+        skill ? new pc.Color(0.85, 0.22, 0.03) : new pc.Color(0.48, 0.18, 0.04),
+        skill ? new pc.Color(1, 0.18, 0.015) : new pc.Color(0.7, 0.08, 0.01)
+      ),
       new pc.Vec3(center.x, 0.65, center.z),
       skill ? new pc.Vec3(3.4, 0.35, 3.4) : new pc.Vec3(1.8, 0.25, 1.8)
     );
@@ -188,7 +192,7 @@ export class RogueliteGame {
       const offset = enemy.position.clone().sub(origin);
       const distance = offset.length();
       if (distance > range + enemy.radius) continue;
-      offset.y = 0;
+      offset.set(offset.x, 0, offset.z);
       const facing = offset.lengthSq() > 0 ? direction.dot(offset.normalize()) : 1;
       if (skill || facing > 0.18) enemy.applyHit(amount);
     }
