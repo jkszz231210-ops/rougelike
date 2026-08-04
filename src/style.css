@@ -25,7 +25,7 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
 .hud-bottom { bottom: 22px; font-size: 13px; color: #d8cabd; }
 .vitals { display: grid; gap: 7px; }
 
-.health-shell, .experience-shell {
+.health-shell, .experience-shell, .synergy-shell {
   position: relative;
   width: min(360px, 48vw);
   overflow: hidden;
@@ -35,13 +35,14 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
   box-shadow: 0 10px 35px rgba(0,0,0,.35);
 }
 .health-shell { height: 22px; }
-.experience-shell { height: 15px; }
-.health-fill, .experience-fill { height: 100%; width: 100%; transition: width .15s ease-out; }
+.experience-shell, .synergy-shell { height: 15px; }
+.health-fill, .experience-fill, .synergy-fill { height: 100%; width: 100%; transition: width .15s ease-out; }
 .health-fill { background: linear-gradient(90deg, #8d2319, #dc5b2e); }
 .experience-fill { background: linear-gradient(90deg, #1f6572, #44b8b5); }
-.health-text, .experience-text { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; }
+.synergy-fill { width: 0; background: linear-gradient(90deg, #5f3a8f, #b880ef); }
+.health-text, .experience-text, .synergy-text { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; }
 .health-text { font-size: 12px; }
-.experience-text { font-size: 9px; letter-spacing: .04em; }
+.experience-text, .synergy-text { font-size: 9px; letter-spacing: .04em; }
 
 .room-text, .cooldown-text, .controls, .run-panel {
   padding: 9px 13px;
@@ -52,15 +53,16 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
 }
 .run-panel {
   position: absolute;
-  top: 83px;
+  top: 104px;
   left: 28px;
   display: grid;
   gap: 5px;
-  max-width: min(520px, 70vw);
+  max-width: min(560px, 72vw);
   color: #cfc3b8;
   font-size: 11px;
   text-shadow: 0 2px 8px #000;
 }
+.companion-text { color: #a8eee1; }
 .relic-text { color: #ffd1a3; }
 
 .message {
@@ -123,8 +125,8 @@ body { margin: 0; overflow: hidden; background: #0b0e12; }
 @media (max-width: 720px) {
   .hud-top, .hud-bottom { left: 12px; right: 12px; }
   .room-text, .controls { display: none; }
-  .run-panel { left: 12px; top: 80px; max-width: 80vw; }
-  .message { top: 132px; width: 90%; text-align: center; }
+  .run-panel { left: 12px; top: 101px; max-width: 84vw; }
+  .message { top: 154px; width: 90%; text-align: center; }
   .upgrade-grid { grid-template-columns: 1fr; }
   .upgrade-card { min-height: auto; }
   .panel { padding: 24px; }

@@ -7,6 +7,7 @@ export class InputController {
   private attackRequested = false;
   private skillRequested = false;
   private dashRequested = false;
+  private synergyRequested = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const updatePointer = (event: PointerEvent): void => {
@@ -21,6 +22,7 @@ export class InputController {
         event.preventDefault();
         this.dashRequested = true;
       }
+      if (event.code === 'KeyQ' && !event.repeat) this.synergyRequested = true;
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.code));
     this.canvas.addEventListener('pointermove', updatePointer);
@@ -55,6 +57,12 @@ export class InputController {
   consumeDash(): boolean {
     const requested = this.dashRequested;
     this.dashRequested = false;
+    return requested;
+  }
+
+  consumeSynergy(): boolean {
+    const requested = this.synergyRequested;
+    this.synergyRequested = false;
     return requested;
   }
 

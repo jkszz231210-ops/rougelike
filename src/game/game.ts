@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { Hud } from '../core/hud';
 import { InputController } from '../core/input';
 import { ProfileStore } from '../core/profile';
+import { Companion, COMPANION_NAMES, type CompanionKind } from './companion';
 import {
   RELIC_CATALOG,
   UPGRADE_CATALOG,
@@ -30,14 +31,16 @@ export class RogueliteGame {
   private readonly profile = new ProfileStore();
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
+  private companions: Companion[] = [];
   private state: GameState = 'playing';
   private roomIndex = 0;
   private level = 1;
   private experience = 0;
-  private experienceToNext = GAME_CONFIG.progression.baseExperience;
+  private experienceToNext: number = GAME_CONFIG.progression.baseExperience;
   private pendingLevels = 0;
   private coins = 0;
   private kills = 0;
+  private synergy = 0;
   private health: number = GAME_CONFIG.player.maxHealth;
   private maxHealth: number = GAME_CONFIG.player.maxHealth;
   private attackPower: number = GAME_CONFIG.player.attackDamage;
@@ -145,6 +148,7 @@ export class RogueliteGame {
     if (this.state === 'playing') {
       this.updatePlayer(dt);
       this.updateEnemies(dt);
+      this.updateCompanions(dt);
       this.updateProjectiles(dt);
       this.checkRoomCompletion();
     }
@@ -162,6 +166,8 @@ export class RogueliteGame {
       enemyCount: this.enemies.filter((enemy) => enemy.alive).length,
       coins: this.coins,
       relics: [...this.relics].map((id) => RELIC_CATALOG.find((relic) => relic.id === id)?.name ?? id),
+      companions: this.companions.map((companion) => companion.name),
+      synergy: this.synergy,
       seed: this.seedLabel,
       skillCooldown: this.skillTimer,
       dashCooldown: this.dashTimer,
@@ -195,11 +201,12 @@ export class RogueliteGame {
 
     if (this.input.consumeAttack() && this.attackTimer <= 0) this.performAction(false);
     if (this.input.consumeSkill() && this.skillTimer <= 0) this.performAction(true);
+    if (this.input.consumeSynergy()) this.performSynergy();
   }
 
   private getAimDirection(): pc.Vec3 {
     const direction = this.aimMarker.getPosition().clone().sub(this.player.getPosition());
-    direction.y = 0;
+    direction.set(direction.x, 0, direction.z);
     if (direction.lengthSq() < 0.001) return new pc.Vec3(0, 0, -1);
     return direction.normalize();
   }
@@ -227,12 +234,13 @@ export class RogueliteGame {
     window.setTimeout(() => effect.destroy(), skill ? 160 : 90);
 
     let criticalHit = false;
+    let hitCount = 0;
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       const offset = enemy.position.clone().sub(origin);
       const distance = offset.length();
       if (distance > range + enemy.radius) continue;
-      offset.y = 0;
+      offset.set(offset.x, 0, offset.z);
       const facing = offset.lengthSq() > 0 ? direction.dot(offset.normalize()) : 1;
       if (!skill && facing <= 0.18) continue;
 
@@ -243,7 +251,9 @@ export class RogueliteGame {
         criticalHit = true;
       }
       enemy.applyHit(Math.round(amount));
+      hitCount += 1;
     }
+    if (this.companions.length > 0) this.synergy = Math.min(100, this.synergy + hitCount * (skill ? 4 : 2));
 
     if (skill) {
       this.skillTimer = GAME_CONFIG.player.skillCooldown * this.skillCooldownScale;
@@ -254,9 +264,56 @@ export class RogueliteGame {
     }
   }
 
+  private performSynergy(): void {
+    const count = this.companions.length;
+    if (count === 0) {
+      this.message = '尚未解救可以协同作战的伙伴';
+      return;
+    }
+    if (this.synergy < 100) {
+      this.message = `协同能量尚未充满 · ${Math.floor(this.synergy)}%`;
+      return;
+    }
+
+    this.synergy = 0;
+    const damage = count === 1 ? 34 : count === 2 ? 44 : 56;
+    const origin = this.player.getPosition();
+    const material = createMaterial(new pc.Color(0.5, 0.24, 0.7), new pc.Color(0.42, 0.1, 0.8));
+    const effect = createPrimitive(
+      this.app,
+      'companion-synergy',
+      'sphere',
+      material,
+      new pc.Vec3(origin.x, 0.55, origin.z),
+      new pc.Vec3(8.5, 0.28, 8.5)
+    );
+    window.setTimeout(() => effect.destroy(), 260);
+
+    for (const enemy of this.enemies) {
+      if (enemy.alive) enemy.applyHit(damage);
+    }
+    if (count >= 2) this.invulnerabilityTimer = Math.max(this.invulnerabilityTimer, 1.5);
+    if (count >= 3) {
+      this.health = Math.min(this.maxHealth, this.health + 28);
+      this.invulnerabilityTimer = Math.max(this.invulnerabilityTimer, 2);
+    }
+    this.message = count === 1 ? '弦羽 · 箭雨' : count === 2 ? '弦羽与壁垒 · 守护箭阵' : '三人协同 · 星辉回响';
+  }
+
   private updateEnemies(dt: number): void {
     const playerPosition = this.player.getPosition().clone();
     for (const enemy of this.enemies) enemy.update(dt, playerPosition, (amount) => this.receiveImpact(amount));
+  }
+
+  private updateCompanions(dt: number): void {
+    const playerPosition = this.player.getPosition().clone();
+    for (const companion of this.companions) {
+      companion.update(dt, playerPosition, this.enemies, (amount) => {
+        const previous = this.health;
+        this.health = Math.min(this.maxHealth, this.health + amount);
+        if (this.health > previous) this.message = `星眠为队伍恢复 ${amount} 点生命`;
+      });
+    }
   }
 
   private updateProjectiles(dt: number): void {
@@ -343,6 +400,7 @@ export class RogueliteGame {
     this.coins += Math.round(reward.coins * this.coinMultiplier);
     this.health = Math.min(this.maxHealth, this.health + this.healOnKill);
     this.gainExperience(reward.experience);
+    if (this.companions.length > 0) this.synergy = Math.min(100, this.synergy + (reward.kind === 'boss' ? 24 : reward.kind === 'elite' ? 18 : 11));
     this.message = reward.kind === 'boss' ? '灰烬守卫已被击败' : `获得 ${reward.experience} 经验与 ${reward.coins} 金币`;
   }
 
@@ -463,6 +521,22 @@ export class RogueliteGame {
     this.message = `获得遗物 · ${name}`;
   }
 
+  private unlockCompanion(): string | null {
+    const roomNumber = this.roomIndex + 1;
+    const unlocks: Partial<Record<number, CompanionKind>> = {
+      2: 'archer',
+      3: 'guardian',
+      4: 'support'
+    };
+    const kind = unlocks[roomNumber];
+    if (!kind || this.companions.some((companion) => companion.kind === kind)) return null;
+
+    const companion = new Companion(this.app, kind, this.player.getPosition().clone());
+    this.companions.push(companion);
+    this.synergy = Math.max(this.synergy, 35);
+    return COMPANION_NAMES[kind];
+  }
+
   private completeRoom(): void {
     const nextRoom = this.rooms[this.roomIndex + 1];
     if (!nextRoom) {
@@ -470,8 +544,10 @@ export class RogueliteGame {
       return;
     }
 
+    const unlocked = this.unlockCompanion();
     this.state = 'room-complete';
-    const detail = `当前等级 ${this.level}，金币 ${this.coins}。下一房间：${nextRoom.title}`;
+    const unlockText = unlocked ? `伙伴「${unlocked}」已加入队伍。` : '';
+    const detail = `${unlockText} 当前等级 ${this.level}，金币 ${this.coins}。下一房间：${nextRoom.title}`.trim();
     this.hud.showRoomComplete((this.rooms[this.roomIndex] as RoomDefinition).title, detail, () => this.enterRoom(this.roomIndex + 1));
   }
 
