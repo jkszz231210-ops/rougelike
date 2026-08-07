@@ -8,6 +8,7 @@ export class InputController {
   private skillRequested = false;
   private dashRequested = false;
   private synergyRequested = false;
+  private moveRequested = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const updatePointer = (event: PointerEvent): void => {
@@ -23,13 +24,17 @@ export class InputController {
         this.dashRequested = true;
       }
       if (event.code === 'KeyQ' && !event.repeat) this.synergyRequested = true;
+      if (event.code === 'KeyE' && !event.repeat) this.skillRequested = true;
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.code));
     this.canvas.addEventListener('pointermove', updatePointer);
     this.canvas.addEventListener('pointerdown', (event) => {
       updatePointer(event);
       if (event.button === 0) this.attackRequested = true;
-      if (event.button === 2) this.skillRequested = true;
+      if (event.button === 2) {
+        if (event.shiftKey) this.skillRequested = true;
+        else this.moveRequested = true;
+      }
     });
     this.canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
@@ -63,6 +68,12 @@ export class InputController {
   consumeSynergy(): boolean {
     const requested = this.synergyRequested;
     this.synergyRequested = false;
+    return requested;
+  }
+
+  consumeMoveRequest(): boolean {
+    const requested = this.moveRequested;
+    this.moveRequested = false;
     return requested;
   }
 
