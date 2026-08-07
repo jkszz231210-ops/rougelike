@@ -1,10 +1,17 @@
 import * as pc from 'playcanvas';
 
-export function createMaterial(color: pc.Color, emissive?: pc.Color): pc.StandardMaterial {
+export type PrimitiveType = 'box' | 'sphere' | 'capsule' | 'cylinder' | 'cone' | 'plane';
+
+export function createMaterial(
+  color: pc.Color,
+  emissive?: pc.Color,
+  metalness = 0.05,
+  gloss = 0.3
+): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
   material.diffuse = color;
-  material.metalness = 0.05;
-  material.gloss = 0.3;
+  material.metalness = metalness;
+  material.gloss = gloss;
   if (emissive) {
     material.emissive = emissive;
     material.emissiveIntensity = 1.5;
@@ -16,7 +23,7 @@ export function createMaterial(color: pc.Color, emissive?: pc.Color): pc.Standar
 export function createPrimitive(
   app: pc.Application,
   name: string,
-  type: 'box' | 'sphere' | 'capsule' | 'cylinder' | 'cone' | 'plane',
+  type: PrimitiveType,
   material: pc.StandardMaterial,
   position: pc.Vec3,
   scale: pc.Vec3
@@ -27,6 +34,25 @@ export function createPrimitive(
   entity.setPosition(position);
   entity.setLocalScale(scale);
   app.root.addChild(entity);
+  return entity;
+}
+
+export function createChildPrimitive(
+  parent: pc.Entity,
+  name: string,
+  type: PrimitiveType,
+  material: pc.StandardMaterial,
+  position: pc.Vec3,
+  scale: pc.Vec3,
+  euler?: pc.Vec3
+): pc.Entity {
+  const entity = new pc.Entity(name);
+  entity.addComponent('model', { type });
+  if (entity.model) entity.model.material = material;
+  entity.setLocalPosition(position);
+  entity.setLocalScale(scale);
+  if (euler) entity.setLocalEulerAngles(euler.x, euler.y, euler.z);
+  parent.addChild(entity);
   return entity;
 }
 
