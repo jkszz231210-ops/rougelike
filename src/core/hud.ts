@@ -56,12 +56,13 @@ export class Hud {
         <div class="room-text"></div>
       </div>
       <div class="run-panel">
+        <div class="run-title">灰烬远征 · V0.2</div>
         <div class="run-text"></div>
         <div class="companion-text"></div>
         <div class="relic-text"></div>
       </div>
       <div class="hud-bottom">
-        <div class="controls">WASD 移动 · 左键攻击 · 右键技能 · Space 闪避 · Q 伙伴协同</div>
+        <div class="controls">右键点地移动 / WASD 镜头方向移动 · 左键攻击 · E 或 Shift+右键技能 · Space 闪避 · Q 协同</div>
         <div class="cooldown-text"></div>
       </div>
       <div class="message" aria-live="polite"></div>
@@ -96,7 +97,7 @@ export class Hud {
       : snapshot.synergy >= 100
         ? '协同就绪 · 按 Q'
         : `协同 ${Math.floor(snapshot.synergy)}%`;
-    this.roomText.textContent = `第 ${snapshot.room}/${snapshot.roomCount} 房 · ${snapshot.roomTitle} · 敌人 ${snapshot.enemyCount}`;
+    this.roomText.textContent = `第 ${snapshot.room}/${snapshot.roomCount} 关 · ${snapshot.roomTitle} · 敌人 ${snapshot.enemyCount}`;
     this.runText.textContent = `金币 ${snapshot.coins} · 种子 ${snapshot.seed}`;
     this.companionText.textContent = snapshot.companions.length > 0 ? `伙伴：${snapshot.companions.join('、')}` : '伙伴：尚未解救';
     this.relicText.textContent = snapshot.relics.length > 0 ? `遗物：${snapshot.relics.join('、')}` : '遗物：尚未获得';
@@ -163,7 +164,7 @@ export class Hud {
     this.modal.classList.remove('hidden');
     this.modal.innerHTML = `
       <section class="panel result-panel compact-panel">
-        <p class="eyebrow">房间肃清</p>
+        <p class="eyebrow">关卡肃清</p>
         <h1>${title}</h1>
         <p>${detail}</p>
         <button class="primary-button" id="continue-button">继续前进</button>
@@ -186,8 +187,8 @@ export class Hud {
       <section class="panel result-panel">
         <p class="eyebrow">${victory ? '灰烬暂熄' : '命数断裂'}</p>
         <h1>${victory ? '灰烬荒原已通关' : '你倒在了荒原'}</h1>
-        <p>种子 ${summary.seed} · 房间 ${summary.room}/5 · 等级 ${summary.level} · 击败 ${summary.kills} · 金币 ${summary.coins}</p>
-        <p class="profile-line">累计游玩 ${summary.profile.runs} 局 · 通关 ${summary.profile.victories} 次 · 最远房间 ${summary.profile.bestRoom}</p>
+        <p>种子 ${summary.seed} · 关卡 ${summary.room}/5 · 等级 ${summary.level} · 击败 ${summary.kills} · 金币 ${summary.coins}</p>
+        <p class="profile-line">累计游玩 ${summary.profile.runs} 局 · 通关 ${summary.profile.victories} 次 · 最远关卡 ${summary.profile.bestRoom}</p>
         <div class="result-actions">
           <button class="primary-button" id="same-seed-button">同种子重开</button>
           <button class="secondary-button" id="new-seed-button">生成新种子</button>
