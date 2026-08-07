@@ -186,7 +186,7 @@ export class ArenaEnvironment {
         new pc.Vec3(Math.cos(angle) * radius * 0.52, 0.07, -1 + Math.sin(angle) * radius * 0.52),
         new pc.Vec3(0.13, 0.035, radius)
       ));
-      spoke.setLocalEulerAngles(0, -angle * pc.math.RAD_TO_DEG, 0);
+      spoke.setLocalEulerAngles(0, -angle * (180 / Math.PI), 0);
     }
     this.track(createPrimitive(this.app, 'boss-sigil-core', 'cylinder', center, new pc.Vec3(0, 0.075, -1), new pc.Vec3(1.3, 0.045, 1.3)));
     const ring = [
@@ -273,7 +273,8 @@ export class ArenaEnvironment {
     this.track(createPrimitive(this.app, `torch-post-${x}-${z}`, 'cylinder', metal, new pc.Vec3(x, 0.64, z), new pc.Vec3(0.14, 1.0, 0.14)));
     this.track(createPrimitive(this.app, `torch-bowl-${x}-${z}`, 'cylinder', metal, new pc.Vec3(x, 1.18, z), new pc.Vec3(0.5, 0.15, 0.5)));
     this.track(createPrimitive(this.app, `torch-fire-${x}-${z}`, 'cone', fire, new pc.Vec3(x, 1.55, z), new pc.Vec3(0.34, 0.68, 0.34)));
-    this.track(createPrimitive(this.app, `torch-fire-tip-${x}-${z}`, 'cone', fire, new pc.Vec3(x + 0.08, 1.86, z), new pc.Vec3(0.16, 0.42, 0.16), new pc.Vec3(8, 0, 8)));
+    const tip = this.track(createPrimitive(this.app, `torch-fire-tip-${x}-${z}`, 'cone', fire, new pc.Vec3(x + 0.08, 1.86, z), new pc.Vec3(0.16, 0.42, 0.16)));
+    tip.setLocalEulerAngles(8, 0, 8);
   }
 
   private addBanner(x: number, z: number, rotation: number, palette: Palette): void {
@@ -301,7 +302,8 @@ export class ArenaEnvironment {
     for (let index = -1; index <= 1; index += 1) {
       const spike = this.track(createPrimitive(this.app, `barricade-${x}-${z}-${index}`, 'cylinder', wood, new pc.Vec3(x + index * 0.52, 0.45, z), new pc.Vec3(0.085, 1.25, 0.085)));
       spike.setLocalEulerAngles(0, rotation, index * 24);
-      this.track(createPrimitive(this.app, `barricade-tip-${x}-${z}-${index}`, 'cone', wood, new pc.Vec3(x + index * 0.52, 1.14, z), new pc.Vec3(0.15, 0.45, 0.15), new pc.Vec3(0, rotation, index * 24)));
+      const tip = this.track(createPrimitive(this.app, `barricade-tip-${x}-${z}-${index}`, 'cone', wood, new pc.Vec3(x + index * 0.52, 1.14, z), new pc.Vec3(0.15, 0.45, 0.15)));
+      tip.setLocalEulerAngles(0, rotation, index * 24);
     }
   }
 
