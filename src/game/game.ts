@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { Hud } from '../core/hud';
 import { InputController } from '../core/input';
 import { ProfileStore } from '../core/profile';
+import { ArenaEnvironment } from './arena';
 import { Companion, COMPANION_NAMES, type CompanionKind } from './companion';
 import {
   RELIC_CATALOG,
@@ -15,7 +16,7 @@ import { GAME_CONFIG, type EnemyKind } from './config';
 import { Enemy, type DefeatReward } from './enemy';
 import { Projectile } from './projectile';
 import { createSeedLabel, SeededRng } from './rng';
-import { createMaterial, createPrimitive, flashEntity } from './visuals';
+import { createChildPrimitive, createMaterial, createPrimitive, flashEntity } from './visuals';
 
 type GameState = 'playing' | 'choosing-upgrade' | 'choosing-relic' | 'room-complete' | 'won' | 'lost';
 
@@ -25,6 +26,8 @@ export class RogueliteGame {
   private readonly player: pc.Entity;
   private readonly camera: pc.Entity;
   private readonly aimMarker: pc.Entity;
+  private readonly moveMarker: pc.Entity;
+  private readonly arena: ArenaEnvironment;
   private readonly seedLabel: string;
   private readonly rng: SeededRng;
   private readonly rooms: RoomDefinition[];
@@ -62,6 +65,7 @@ export class RogueliteGame {
   private skillTimer = 0;
   private dashTimer = 0;
   private invulnerabilityTimer = 0;
+  private moveTarget: pc.Vec3 | null = null;
   private message = '命数正在生成';
 
   constructor(private readonly app: pc.Application, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
@@ -71,72 +75,100 @@ export class RogueliteGame {
     this.input = new InputController(canvas);
     this.hud = new Hud(hudRoot);
     this.camera = this.createWorld();
+    this.arena = new ArenaEnvironment(this.app);
     this.player = this.createPlayer();
     this.aimMarker = this.createAimMarker();
+    this.moveMarker = this.createMoveMarker();
     this.enterRoom(0);
     this.app.on('update', (dt: number) => this.update(Math.min(dt, 0.05)));
   }
 
   private createWorld(): pc.Entity {
-    this.app.scene.ambientLight = new pc.Color(0.22, 0.24, 0.27);
-    this.app.scene.exposure = 1.05;
+    this.app.scene.ambientLight = new pc.Color(0.18, 0.19, 0.22);
+    this.app.scene.exposure = 1.12;
 
-    const ground = createMaterial(new pc.Color(0.16, 0.17, 0.18));
-    createPrimitive(this.app, 'arena-ground', 'box', ground, new pc.Vec3(0, -0.35, 0), new pc.Vec3(24, 0.6, 24));
+    const ground = createMaterial(new pc.Color(0.065, 0.07, 0.078), undefined, 0.02, 0.16);
+    createPrimitive(this.app, 'arena-ground', 'box', ground, new pc.Vec3(0, -0.4, 0), new pc.Vec3(26, 0.7, 26));
 
-    const rim = createMaterial(new pc.Color(0.07, 0.08, 0.09), new pc.Color(0.08, 0.025, 0.01));
-    const half = GAME_CONFIG.arenaHalfSize + 0.5;
-    createPrimitive(this.app, 'north-wall', 'box', rim, new pc.Vec3(0, 0.35, -half), new pc.Vec3(24, 1.4, 0.5));
-    createPrimitive(this.app, 'south-wall', 'box', rim, new pc.Vec3(0, 0.35, half), new pc.Vec3(24, 1.4, 0.5));
-    createPrimitive(this.app, 'west-wall', 'box', rim, new pc.Vec3(-half, 0.35, 0), new pc.Vec3(0.5, 1.4, 24));
-    createPrimitive(this.app, 'east-wall', 'box', rim, new pc.Vec3(half, 0.35, 0), new pc.Vec3(0.5, 1.4, 24));
+    const rim = createMaterial(new pc.Color(0.05, 0.055, 0.065), new pc.Color(0.055, 0.012, 0.006), 0.2, 0.28);
+    const half = GAME_CONFIG.arenaHalfSize + 0.65;
+    createPrimitive(this.app, 'north-wall', 'box', rim, new pc.Vec3(0, 0.55, -half), new pc.Vec3(25, 1.8, 0.65));
+    createPrimitive(this.app, 'south-wall', 'box', rim, new pc.Vec3(0, 0.55, half), new pc.Vec3(25, 1.8, 0.65));
+    createPrimitive(this.app, 'west-wall', 'box', rim, new pc.Vec3(-half, 0.55, 0), new pc.Vec3(0.65, 1.8, 25));
+    createPrimitive(this.app, 'east-wall', 'box', rim, new pc.Vec3(half, 0.55, 0), new pc.Vec3(0.65, 1.8, 25));
 
-    for (let index = 0; index < 18; index += 1) {
-      const angle = (index / 18) * Math.PI * 2;
-      const radius = 8 + (index % 3);
-      const ember = createMaterial(new pc.Color(0.12, 0.08, 0.06), new pc.Color(0.28, 0.055, 0.008));
-      createPrimitive(
+    const outerStone = createMaterial(new pc.Color(0.085, 0.088, 0.095), undefined, 0.06, 0.16);
+    for (let index = 0; index < 20; index += 1) {
+      const angle = (index / 20) * Math.PI * 2;
+      const radius = 12.8 + (index % 3) * 0.7;
+      const rock = createPrimitive(
         this.app,
-        `ember-${index}`,
-        'sphere',
-        ember,
-        new pc.Vec3(Math.cos(angle) * radius, 0.04, Math.sin(angle) * radius),
-        new pc.Vec3(0.12, 0.05, 0.12)
+        `outer-rock-${index}`,
+        index % 2 === 0 ? 'box' : 'cone',
+        outerStone,
+        new pc.Vec3(Math.cos(angle) * radius, 0.2 + (index % 3) * 0.12, Math.sin(angle) * radius),
+        new pc.Vec3(0.7 + (index % 2) * 0.35, 0.7 + (index % 3) * 0.45, 0.7 + ((index + 1) % 2) * 0.3)
       );
+      rock.setLocalEulerAngles(index * 7, index * 31, index * 3);
     }
 
     const light = new pc.Entity('sun');
     light.addComponent('light', {
       type: 'directional',
-      color: new pc.Color(1, 0.72, 0.52),
-      intensity: 1.45,
+      color: new pc.Color(1, 0.69, 0.48),
+      intensity: 1.5,
       castShadows: true,
-      shadowResolution: 1024,
-      shadowDistance: 35
+      shadowResolution: 2048,
+      shadowDistance: 38
     });
-    light.setEulerAngles(48, 35, 0);
+    light.setEulerAngles(52, 34, 0);
     this.app.root.addChild(light);
+
+    const fill = new pc.Entity('cold-fill');
+    fill.addComponent('light', {
+      type: 'directional',
+      color: new pc.Color(0.34, 0.46, 0.62),
+      intensity: 0.32,
+      castShadows: false
+    });
+    fill.setEulerAngles(58, -130, 0);
+    this.app.root.addChild(fill);
 
     const camera = new pc.Entity('camera');
     camera.addComponent('camera', {
-      clearColor: new pc.Color(0.035, 0.045, 0.055),
-      farClip: 80,
-      fov: 46
+      clearColor: new pc.Color(0.025, 0.03, 0.04),
+      farClip: 90,
+      fov: 44
     });
-    camera.setPosition(12, 15, 13);
-    camera.lookAt(0, 0, 0);
+    camera.setPosition(12.5, 15.8, 13.8);
+    camera.lookAt(0, 0.3, 0);
     this.app.root.addChild(camera);
     return camera;
   }
 
   private createPlayer(): pc.Entity {
-    const material = createMaterial(new pc.Color(0.14, 0.38, 0.43), new pc.Color(0.02, 0.16, 0.2));
-    return createPrimitive(this.app, 'player', 'capsule', material, new pc.Vec3(0, 0.95, 4), new pc.Vec3(1.05, 1.8, 1.05));
+    const body = createMaterial(new pc.Color(0.07, 0.3, 0.34), new pc.Color(0.008, 0.09, 0.11), 0.18, 0.5);
+    const player = createPrimitive(this.app, 'player', 'capsule', body, new pc.Vec3(0, 0.95, 5.8), new pc.Vec3(0.92, 1.58, 0.92));
+    const skin = createMaterial(new pc.Color(0.72, 0.61, 0.5), undefined, 0.01, 0.28);
+    const dark = createMaterial(new pc.Color(0.055, 0.065, 0.075), undefined, 0.32, 0.5);
+    const ember = createMaterial(new pc.Color(0.55, 0.18, 0.035), new pc.Color(0.4, 0.055, 0.008), 0.18, 0.45);
+    createChildPrimitive(player, 'player-head', 'sphere', skin, new pc.Vec3(0, 0.91, 0), new pc.Vec3(0.48, 0.48, 0.48));
+    createChildPrimitive(player, 'player-shoulder', 'box', dark, new pc.Vec3(0, 0.46, 0.07), new pc.Vec3(1.15, 0.2, 0.68));
+    createChildPrimitive(player, 'player-spear-shaft', 'cylinder', dark, new pc.Vec3(0.72, 0.16, -0.1), new pc.Vec3(0.09, 1.38, 0.09), new pc.Vec3(0, 0, -20));
+    createChildPrimitive(player, 'player-spear-tip', 'cone', ember, new pc.Vec3(1.12, 1.18, -0.1), new pc.Vec3(0.22, 0.52, 0.22), new pc.Vec3(0, 0, -20));
+    return player;
   }
 
   private createAimMarker(): pc.Entity {
-    const material = createMaterial(new pc.Color(0.8, 0.24, 0.05), new pc.Color(0.8, 0.12, 0.02));
-    return createPrimitive(this.app, 'aim-marker', 'cylinder', material, new pc.Vec3(0, 0.03, 0), new pc.Vec3(0.25, 0.03, 0.25));
+    const material = createMaterial(new pc.Color(0.7, 0.2, 0.045), new pc.Color(0.45, 0.06, 0.008));
+    return createPrimitive(this.app, 'aim-marker', 'cylinder', material, new pc.Vec3(0, 0.045, 0), new pc.Vec3(0.22, 0.025, 0.22));
+  }
+
+  private createMoveMarker(): pc.Entity {
+    const material = createMaterial(new pc.Color(0.08, 0.5, 0.52), new pc.Color(0.015, 0.28, 0.3));
+    const marker = createPrimitive(this.app, 'move-marker', 'cylinder', material, new pc.Vec3(0, 0.04, 0), new pc.Vec3(0.46, 0.025, 0.46));
+    marker.enabled = false;
+    return marker;
   }
 
   private update(dt: number): void {
@@ -176,32 +208,69 @@ export class RogueliteGame {
   }
 
   private updatePlayer(dt: number): void {
-    const movement = this.input.getMovement();
+    const rawMovement = this.input.getMovement();
+    let movement = this.toCameraRelativeMovement(rawMovement);
     const current = this.player.getPosition();
     const position = new pc.Vec3(current.x, current.y, current.z);
 
+    if (this.input.consumeMoveRequest()) {
+      const requested = this.input.getAimPoint(this.camera, 0.03);
+      requested.set(requested.x, 0.03, requested.z);
+      this.moveTarget = this.arena.resolvePosition(requested, 0.68).clone();
+      this.moveMarker.setPosition(this.moveTarget.x, 0.045, this.moveTarget.z);
+      this.moveMarker.enabled = true;
+    }
+
+    if (rawMovement.lengthSq() > 0.001) {
+      this.moveTarget = null;
+      this.moveMarker.enabled = false;
+    } else if (this.moveTarget) {
+      const toTarget = this.moveTarget.clone().sub(position);
+      toTarget.set(toTarget.x, 0, toTarget.z);
+      if (toTarget.lengthSq() < 0.18) {
+        this.moveTarget = null;
+        this.moveMarker.enabled = false;
+      } else {
+        movement = toTarget.normalize();
+      }
+    }
+
     if (this.input.consumeDash() && this.dashTimer <= 0) {
-      const dashDirection = movement.lengthSq() > 0 ? movement : this.getAimDirection();
+      const dashDirection = movement.lengthSq() > 0 ? movement.clone() : this.getAimDirection();
       position.add(dashDirection.mulScalar(GAME_CONFIG.player.dashDistance));
       this.dashTimer = GAME_CONFIG.player.dashCooldown * this.dashCooldownScale;
       this.invulnerabilityTimer = GAME_CONFIG.player.dashInvulnerability;
+      this.moveTarget = null;
+      this.moveMarker.enabled = false;
       flashEntity(this.player, new pc.Color(0.12, 0.85, 1), 0.16);
     } else {
-      position.add(movement.mulScalar(this.moveSpeed * dt));
+      position.add(movement.clone().mulScalar(this.moveSpeed * dt));
     }
 
-    const half = GAME_CONFIG.arenaHalfSize - 0.7;
-    position.set(pc.math.clamp(position.x, -half, half), 0.95, pc.math.clamp(position.z, -half, half));
-    this.player.setPosition(position);
+    const resolved = this.arena.resolvePosition(position, 0.66);
+    resolved.y = 0.95;
+    this.player.setPosition(resolved);
 
     const aimPoint = this.input.getAimPoint(this.camera, 0.03);
-    this.aimMarker.setPosition(aimPoint.x, 0.03, aimPoint.z);
+    this.aimMarker.setPosition(aimPoint.x, 0.045, aimPoint.z);
     const aimDirection = this.getAimDirection();
-    this.player.lookAt(position.x + aimDirection.x, position.y, position.z + aimDirection.z);
+    this.player.lookAt(resolved.x + aimDirection.x, resolved.y, resolved.z + aimDirection.z);
 
     if (this.input.consumeAttack() && this.attackTimer <= 0) this.performAction(false);
     if (this.input.consumeSkill() && this.skillTimer <= 0) this.performAction(true);
     if (this.input.consumeSynergy()) this.performSynergy();
+  }
+
+  private toCameraRelativeMovement(input: pc.Vec3): pc.Vec3 {
+    if (input.lengthSq() < 0.001) return new pc.Vec3();
+    const cameraPosition = this.camera.getPosition();
+    const forward = new pc.Vec3(-cameraPosition.x, 0, -cameraPosition.z);
+    if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
+    else forward.normalize();
+    const right = new pc.Vec3(-forward.z, 0, forward.x);
+    const movement = right.mulScalar(input.x).add(forward.mulScalar(-input.z));
+    if (movement.lengthSq() > 1) movement.normalize();
+    return movement;
   }
 
   private getAimDirection(): pc.Vec3 {
@@ -220,18 +289,18 @@ export class RogueliteGame {
     const center = origin.clone().add(direction.clone().mulScalar(range * 0.58));
 
     const material = createMaterial(
-      skill ? new pc.Color(0.85, 0.22, 0.03) : new pc.Color(0.48, 0.18, 0.04),
-      skill ? new pc.Color(1, 0.18, 0.015) : new pc.Color(0.7, 0.08, 0.01)
+      skill ? new pc.Color(0.82, 0.18, 0.025) : new pc.Color(0.44, 0.14, 0.035),
+      skill ? new pc.Color(0.95, 0.12, 0.008) : new pc.Color(0.58, 0.055, 0.006)
     );
     const effect = createPrimitive(
       this.app,
       skill ? 'skill-effect' : 'attack-effect',
-      'sphere',
+      skill ? 'cylinder' : 'sphere',
       material,
-      new pc.Vec3(center.x, 0.65, center.z),
-      skill ? new pc.Vec3(3.4, 0.35, 3.4).mulScalar(this.attackRangeScale) : new pc.Vec3(1.8, 0.25, 1.8).mulScalar(this.attackRangeScale)
+      new pc.Vec3(center.x, skill ? 0.12 : 0.58, center.z),
+      skill ? new pc.Vec3(3.8, 0.08, 3.8).mulScalar(this.attackRangeScale) : new pc.Vec3(1.75, 0.22, 1.75).mulScalar(this.attackRangeScale)
     );
-    window.setTimeout(() => effect.destroy(), skill ? 160 : 90);
+    window.setTimeout(() => effect.destroy(), skill ? 190 : 90);
 
     let criticalHit = false;
     let hitCount = 0;
@@ -242,7 +311,7 @@ export class RogueliteGame {
       if (distance > range + enemy.radius) continue;
       offset.set(offset.x, 0, offset.z);
       const facing = offset.lengthSq() > 0 ? direction.dot(offset.normalize()) : 1;
-      if (!skill && facing <= 0.18) continue;
+      if (!skill && facing <= 0.12) continue;
 
       let amount = baseAmount * lowHealthMultiplier;
       if (this.relics.has('hunter-eye') && (enemy.kind === 'elite' || enemy.kind === 'boss')) amount *= 1.22;
@@ -282,10 +351,10 @@ export class RogueliteGame {
     const effect = createPrimitive(
       this.app,
       'companion-synergy',
-      'sphere',
+      'cylinder',
       material,
-      new pc.Vec3(origin.x, 0.55, origin.z),
-      new pc.Vec3(8.5, 0.28, 8.5)
+      new pc.Vec3(origin.x, 0.11, origin.z),
+      new pc.Vec3(8.5, 0.08, 8.5)
     );
     window.setTimeout(() => effect.destroy(), 260);
 
@@ -302,7 +371,22 @@ export class RogueliteGame {
 
   private updateEnemies(dt: number): void {
     const playerPosition = this.player.getPosition().clone();
-    for (const enemy of this.enemies) enemy.update(dt, playerPosition, (amount) => this.receiveImpact(amount));
+    const active = this.enemies
+      .filter((enemy) => enemy.alive)
+      .sort((a, b) => a.position.distance(playerPosition) - b.position.distance(playerPosition));
+    let meleeSlots = 0;
+    for (const enemy of active) {
+      const isMelee = enemy.kind !== 'ranged';
+      const allowAttack = !isMelee || meleeSlots < 2;
+      enemy.update(
+        dt,
+        playerPosition,
+        (amount) => this.receiveImpact(amount),
+        (position, radius) => this.arena.resolvePosition(position, radius),
+        allowAttack
+      );
+      if (isMelee && allowAttack) meleeSlots += 1;
+    }
   }
 
   private updateCompanions(dt: number): void {
@@ -332,8 +416,8 @@ export class RogueliteGame {
     if (this.invulnerabilityTimer > 0 || this.state !== 'playing') return;
     const reducedAmount = Math.max(1, amount * (1 - Math.min(0.65, this.damageReduction)));
     this.health -= reducedAmount;
-    this.invulnerabilityTimer = 0.45;
-    flashEntity(this.player, new pc.Color(1, 0.04, 0.02), 0.12);
+    this.invulnerabilityTimer = GAME_CONFIG.player.hitInvulnerability;
+    flashEntity(this.player, new pc.Color(1, 0.04, 0.02), 0.14);
     this.message = `受到 ${Math.ceil(reducedAmount)} 点伤害`;
 
     if (this.health > 0) return;
@@ -351,11 +435,15 @@ export class RogueliteGame {
     this.clearCombatEntities();
     this.roomIndex = index;
     this.profile.markRoom(index + 1);
-    this.player.setPosition(0, 0.95, 4);
+    this.arena.rebuild(index);
+    this.player.setPosition(0, 0.95, index === 4 ? 7.2 : 5.8);
+    this.moveTarget = null;
+    this.moveMarker.enabled = false;
     const room = this.rooms[index] as RoomDefinition;
 
+    if (index > 0) this.health = Math.min(this.maxHealth, this.health + 10);
     if (index > 0 && this.relics.has('empty-bottle')) this.health = Math.min(this.maxHealth, this.health + 18);
-    this.message = `进入 ${room.title}`;
+    this.message = index === 0 ? '右键点地移动，也可使用 WASD' : `进入 ${room.title}`;
 
     if (room.kind === 'relic') {
       this.presentRelic(() => this.completeRoom());
@@ -368,20 +456,30 @@ export class RogueliteGame {
     for (const kind of order) {
       const count = room.enemies[kind] ?? 0;
       for (let current = 0; current < count; current += 1) {
-        const position = kind === 'boss' ? new pc.Vec3(0, 1.6, -4) : this.spawnPosition(spawnIndex++);
+        const position = kind === 'boss' ? new pc.Vec3(0, 1.5, -4.8) : this.spawnPosition(spawnIndex++);
         this.spawnEnemy(kind, position);
       }
     }
   }
 
   private spawnPosition(index: number): pc.Vec3 {
-    const angle = (index / 7) * Math.PI * 2 + this.roomIndex * 0.7 + this.rng.next() * 0.35;
-    const radius = 6.6 + (index % 2) * 1.2;
-    return new pc.Vec3(Math.cos(angle) * radius, 0.85, Math.sin(angle) * radius - 1.2);
+    const patterns = [
+      new pc.Vec3(-6.8, 0.82, -5.8),
+      new pc.Vec3(6.6, 0.82, -5.4),
+      new pc.Vec3(0, 0.82, -7.2),
+      new pc.Vec3(-7.8, 0.82, 0.8),
+      new pc.Vec3(7.7, 0.82, 1.0),
+      new pc.Vec3(-4.2, 0.82, 6.8),
+      new pc.Vec3(4.2, 0.82, 6.8)
+    ];
+    const base = (patterns[(index + this.roomIndex) % patterns.length] as pc.Vec3).clone();
+    base.x += (this.rng.next() - 0.5) * 0.8;
+    base.z += (this.rng.next() - 0.5) * 0.8;
+    return this.arena.resolvePosition(base, 0.9);
   }
 
   private spawnEnemy(kind: EnemyKind, position: pc.Vec3): void {
-    const difficultyScale = 1 + this.roomIndex * 0.16;
+    const difficultyScale = 1 + this.roomIndex * 0.08;
     this.enemies.push(new Enemy(
       this.app,
       kind,
@@ -398,7 +496,7 @@ export class RogueliteGame {
   private handleDefeat(reward: DefeatReward): void {
     this.kills += 1;
     this.coins += Math.round(reward.coins * this.coinMultiplier);
-    this.health = Math.min(this.maxHealth, this.health + this.healOnKill);
+    this.health = Math.min(this.maxHealth, this.health + 1 + this.healOnKill);
     this.gainExperience(reward.experience);
     if (this.companions.length > 0) this.synergy = Math.min(100, this.synergy + (reward.kind === 'boss' ? 24 : reward.kind === 'elite' ? 18 : 11));
     this.message = reward.kind === 'boss' ? '灰烬守卫已被击败' : `获得 ${reward.experience} 经验与 ${reward.coins} 金币`;
@@ -546,8 +644,8 @@ export class RogueliteGame {
 
     const unlocked = this.unlockCompanion();
     this.state = 'room-complete';
-    const unlockText = unlocked ? `伙伴「${unlocked}」已加入队伍。` : '';
-    const detail = `${unlockText} 当前等级 ${this.level}，金币 ${this.coins}。下一房间：${nextRoom.title}`.trim();
+    const unlockedText = unlocked ? `伙伴「${unlocked}」已加入队伍。` : '';
+    const detail = `${unlockedText} 当前等级 ${this.level}，金币 ${this.coins}。下一关：${nextRoom.title}`.trim();
     this.hud.showRoomComplete((this.rooms[this.roomIndex] as RoomDefinition).title, detail, () => this.enterRoom(this.roomIndex + 1));
   }
 
