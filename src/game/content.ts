@@ -70,13 +70,13 @@ export function createStageRooms(rng: SeededRng): RoomDefinition[] {
       id: 'outer-ring',
       title: '灰烬外环',
       kind: 'combat',
-      enemies: { melee: rng.int(4, 6), ranged: rng.int(0, 1) }
+      enemies: { melee: 3 }
     },
     {
       id: 'broken-corridor',
       title: '断墙回廊',
       kind: 'combat',
-      enemies: { melee: rng.int(3, 5), ranged: rng.int(1, 2) }
+      enemies: { melee: rng.int(3, 4), ranged: 1 }
     },
     {
       id: 'relic-sanctum',
@@ -88,7 +88,7 @@ export function createStageRooms(rng: SeededRng): RoomDefinition[] {
       id: 'ember-gate',
       title: '余烬门卫',
       kind: 'elite',
-      enemies: { melee: rng.int(2, 3), ranged: 1, elite: 1 }
+      enemies: { melee: 2, ranged: 1, elite: 1 }
     },
     {
       id: 'warden-arena',
