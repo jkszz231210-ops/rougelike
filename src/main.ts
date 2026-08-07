@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import './style.css';
 import { ArtDirectionDirector } from './game/artDirection';
 import { RogueliteGame } from './game/game';
+import { RemoteAssetDirector } from './game/remoteAssets';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
 const hudRoot = document.querySelector<HTMLElement>('#hud-root');
@@ -23,3 +24,4 @@ app.start();
 window.addEventListener('resize', () => app.resizeCanvas());
 new RogueliteGame(app, canvas, hudRoot);
 new ArtDirectionDirector(app);
+new RemoteAssetDirector(app);
