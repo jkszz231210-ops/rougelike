@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import './style.css';
+import './roguelike.css';
 import { ArtDirectionDirector } from './game/artDirection';
 import { installArenaExpansion } from './game/arenaExpansion';
 import { RogueliteGame } from './game/game';
