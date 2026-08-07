@@ -67,19 +67,19 @@ export interface RoomDefinition {
 export function createStageRooms(rng: SeededRng): RoomDefinition[] {
   return [
     {
-      id: 'outer-ring',
+      id: 'ashen-outskirts',
       title: '灰烬外环',
       kind: 'combat',
       enemies: { melee: 3 }
     },
     {
-      id: 'broken-corridor',
-      title: '断墙回廊',
+      id: 'shattered-aqueduct',
+      title: '断流引渠',
       kind: 'combat',
       enemies: { melee: rng.int(3, 4), ranged: 1 }
     },
     {
-      id: 'relic-sanctum',
+      id: 'nameless-shrine',
       title: '无名遗物室',
       kind: 'relic',
       enemies: {}
@@ -91,10 +91,40 @@ export function createStageRooms(rng: SeededRng): RoomDefinition[] {
       enemies: { melee: 2, ranged: 1, elite: 1 }
     },
     {
-      id: 'warden-arena',
-      title: '灰烬守卫',
+      id: 'bone-orchard',
+      title: '白骨荒圃',
+      kind: 'combat',
+      enemies: { melee: rng.int(4, 5), ranged: 2 }
+    },
+    {
+      id: 'sunken-cloister',
+      title: '沉水回廊',
+      kind: 'combat',
+      enemies: { melee: 3, ranged: rng.int(2, 3), elite: 1 }
+    },
+    {
+      id: 'starfall-archive',
+      title: '坠星秘库',
+      kind: 'relic',
+      enemies: {}
+    },
+    {
+      id: 'furnace-heart',
+      title: '熔炉心室',
+      kind: 'elite',
+      enemies: { melee: 3, ranged: 2, elite: 1 }
+    },
+    {
+      id: 'last-causeway',
+      title: '终焰长桥',
+      kind: 'elite',
+      enemies: { melee: 4, ranged: 2, elite: 2 }
+    },
+    {
+      id: 'warden-citadel',
+      title: '灰烬守卫王座',
       kind: 'boss',
-      enemies: { boss: 1 }
+      enemies: { melee: 2, ranged: 2, boss: 1 }
     }
   ];
 }
