@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { Hud } from '../core/hud';
+import { Hud, type DecisionOption } from '../core/hud';
 import { InputController } from '../core/input';
 import { ProfileStore } from '../core/profile';
 import { ArenaEnvironment } from './arena';
@@ -7,9 +7,10 @@ import { Companion, COMPANION_NAMES, type CompanionKind } from './companion';
 import {
   RELIC_CATALOG,
   UPGRADE_CATALOG,
-  createStageRooms,
+  createRoguelikeRoute,
   type RelicId,
   type RoomDefinition,
+  type RouteLayer,
   type UpgradeId
 } from './content';
 import { GAME_CONFIG, type EnemyKind } from './config';
@@ -18,7 +19,17 @@ import { Projectile } from './projectile';
 import { createSeedLabel, SeededRng } from './rng';
 import { createChildPrimitive, createMaterial, createPrimitive, flashEntity } from './visuals';
 
-type GameState = 'playing' | 'choosing-upgrade' | 'choosing-relic' | 'room-complete' | 'won' | 'lost';
+type GameState =
+  | 'playing'
+  | 'choosing-upgrade'
+  | 'choosing-relic'
+  | 'choosing-route'
+  | 'merchant'
+  | 'resting'
+  | 'event'
+  | 'room-complete'
+  | 'won'
+  | 'lost';
 
 export class RogueliteGame {
   private readonly input: InputController;
@@ -30,13 +41,15 @@ export class RogueliteGame {
   private readonly arena: ArenaEnvironment;
   private readonly seedLabel: string;
   private readonly rng: SeededRng;
-  private readonly rooms: RoomDefinition[];
+  private readonly route: RouteLayer[];
   private readonly profile = new ProfileStore();
+  private currentRoom: RoomDefinition;
+  private visitedRoomIds: string[] = [];
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
   private companions: Companion[] = [];
   private state: GameState = 'playing';
-  private roomIndex = 0;
+  private depth = 0;
   private level = 1;
   private experience = 0;
   private experienceToNext: number = GAME_CONFIG.progression.baseExperience;
@@ -71,7 +84,8 @@ export class RogueliteGame {
   constructor(private readonly app: pc.Application, canvas: HTMLCanvasElement, hudRoot: HTMLElement) {
     this.seedLabel = createSeedLabel();
     this.rng = new SeededRng(this.seedLabel);
-    this.rooms = createStageRooms(this.rng);
+    this.route = createRoguelikeRoute(this.rng);
+    this.currentRoom = this.route[0]?.[0] as RoomDefinition;
     this.input = new InputController(canvas);
     this.hud = new Hud(hudRoot);
     this.camera = this.createWorld();
@@ -79,7 +93,7 @@ export class RogueliteGame {
     this.player = this.createPlayer();
     this.aimMarker = this.createAimMarker();
     this.moveMarker = this.createMoveMarker();
-    this.enterRoom(0);
+    this.enterRoom(this.currentRoom, 0);
     this.app.on('update', (dt: number) => this.update(Math.min(dt, 0.05)));
   }
 
@@ -135,11 +149,7 @@ export class RogueliteGame {
     this.app.root.addChild(fill);
 
     const camera = new pc.Entity('camera');
-    camera.addComponent('camera', {
-      clearColor: new pc.Color(0.025, 0.03, 0.04),
-      farClip: 90,
-      fov: 44
-    });
+    camera.addComponent('camera', { clearColor: new pc.Color(0.025, 0.03, 0.04), farClip: 90, fov: 44 });
     camera.setPosition(12.5, 15.8, 13.8);
     camera.lookAt(0, 0.3, 0);
     this.app.root.addChild(camera);
@@ -185,16 +195,16 @@ export class RogueliteGame {
       this.checkRoomCompletion();
     }
 
-    const room = this.rooms[this.roomIndex] as RoomDefinition;
     this.hud.update({
       health: this.health,
       maxHealth: this.maxHealth,
       level: this.level,
       experience: this.experience,
       experienceToNext: this.experienceToNext,
-      room: this.roomIndex + 1,
-      roomCount: this.rooms.length,
-      roomTitle: room.title,
+      room: this.depth + 1,
+      roomCount: this.route.length,
+      roomTitle: this.currentRoom.title,
+      roomKind: this.currentRoom.kind,
       enemyCount: this.enemies.filter((enemy) => enemy.alive).length,
       coins: this.coins,
       relics: [...this.relics].map((id) => RELIC_CATALOG.find((relic) => relic.id === id)?.name ?? id),
@@ -348,19 +358,10 @@ export class RogueliteGame {
     const damage = count === 1 ? 34 : count === 2 ? 44 : 56;
     const origin = this.player.getPosition();
     const material = createMaterial(new pc.Color(0.5, 0.24, 0.7), new pc.Color(0.42, 0.1, 0.8));
-    const effect = createPrimitive(
-      this.app,
-      'companion-synergy',
-      'cylinder',
-      material,
-      new pc.Vec3(origin.x, 0.11, origin.z),
-      new pc.Vec3(8.5, 0.08, 8.5)
-    );
+    const effect = createPrimitive(this.app, 'companion-synergy', 'cylinder', material, new pc.Vec3(origin.x, 0.11, origin.z), new pc.Vec3(8.5, 0.08, 8.5));
     window.setTimeout(() => effect.destroy(), 260);
 
-    for (const enemy of this.enemies) {
-      if (enemy.alive) enemy.applyHit(damage);
-    }
+    for (const enemy of this.enemies) if (enemy.alive) enemy.applyHit(damage);
     if (count >= 2) this.invulnerabilityTimer = Math.max(this.invulnerabilityTimer, 1.5);
     if (count >= 3) {
       this.health = Math.min(this.maxHealth, this.health + 28);
@@ -371,9 +372,7 @@ export class RogueliteGame {
 
   private updateEnemies(dt: number): void {
     const playerPosition = this.player.getPosition().clone();
-    const active = this.enemies
-      .filter((enemy) => enemy.alive)
-      .sort((a, b) => a.position.distance(playerPosition) - b.position.distance(playerPosition));
+    const active = this.enemies.filter((enemy) => enemy.alive).sort((a, b) => a.position.distance(playerPosition) - b.position.distance(playerPosition));
     let meleeSlots = 0;
     for (const enemy of active) {
       const isMelee = enemy.kind !== 'ranged';
@@ -431,22 +430,35 @@ export class RogueliteGame {
     this.finishRun(false);
   }
 
-  private enterRoom(index: number): void {
+  private enterRoom(room: RoomDefinition, depth: number): void {
     this.clearCombatEntities();
-    this.roomIndex = index;
-    this.profile.markRoom(index + 1);
-    this.arena.rebuild(index);
-    this.player.setPosition(0, 0.95, index === 4 ? 7.2 : 5.8);
+    this.depth = depth;
+    this.currentRoom = room;
+    if (!this.visitedRoomIds.includes(room.id)) this.visitedRoomIds.push(room.id);
+    this.profile.markRoom(depth + 1);
+    this.arena.rebuild(depth);
+    this.player.setPosition(0, 0.95, depth === this.route.length - 1 ? 7.2 : 5.8);
     this.moveTarget = null;
     this.moveMarker.enabled = false;
-    const room = this.rooms[index] as RoomDefinition;
 
-    if (index > 0) this.health = Math.min(this.maxHealth, this.health + 10);
-    if (index > 0 && this.relics.has('empty-bottle')) this.health = Math.min(this.maxHealth, this.health + 18);
-    this.message = index === 0 ? '右键点地移动，也可使用 WASD' : `进入 ${room.title}`;
+    if (depth > 0 && this.relics.has('empty-bottle')) this.health = Math.min(this.maxHealth, this.health + 18);
+    this.message = depth === 0 ? '右键点地移动，也可使用 WASD' : `进入 ${room.title} · ${room.description}`;
 
     if (room.kind === 'relic') {
+      this.state = 'choosing-relic';
       this.presentRelic(() => this.completeRoom());
+      return;
+    }
+    if (room.kind === 'merchant') {
+      this.presentMerchant();
+      return;
+    }
+    if (room.kind === 'rest') {
+      this.presentRest();
+      return;
+    }
+    if (room.kind === 'event') {
+      this.presentEvent();
       return;
     }
 
@@ -464,22 +476,17 @@ export class RogueliteGame {
 
   private spawnPosition(index: number): pc.Vec3 {
     const patterns = [
-      new pc.Vec3(-6.8, 0.82, -5.8),
-      new pc.Vec3(6.6, 0.82, -5.4),
-      new pc.Vec3(0, 0.82, -7.2),
-      new pc.Vec3(-7.8, 0.82, 0.8),
-      new pc.Vec3(7.7, 0.82, 1.0),
-      new pc.Vec3(-4.2, 0.82, 6.8),
-      new pc.Vec3(4.2, 0.82, 6.8)
+      new pc.Vec3(-6.8, 0.82, -5.8), new pc.Vec3(6.6, 0.82, -5.4), new pc.Vec3(0, 0.82, -7.2),
+      new pc.Vec3(-7.8, 0.82, 0.8), new pc.Vec3(7.7, 0.82, 1.0), new pc.Vec3(-4.2, 0.82, 6.8), new pc.Vec3(4.2, 0.82, 6.8)
     ];
-    const base = (patterns[(index + this.roomIndex) % patterns.length] as pc.Vec3).clone();
+    const base = (patterns[(index + this.depth) % patterns.length] as pc.Vec3).clone();
     base.x += (this.rng.next() - 0.5) * 0.8;
     base.z += (this.rng.next() - 0.5) * 0.8;
     return this.arena.resolvePosition(base, 0.9);
   }
 
   private spawnEnemy(kind: EnemyKind, position: pc.Vec3): void {
-    const difficultyScale = 1 + this.roomIndex * 0.08;
+    const difficultyScale = 1 + this.depth * 0.07;
     this.enemies.push(new Enemy(
       this.app,
       kind,
@@ -514,18 +521,17 @@ export class RogueliteGame {
 
   private checkRoomCompletion(): void {
     if (this.enemies.some((enemy) => enemy.alive)) return;
-    const room = this.rooms[this.roomIndex] as RoomDefinition;
     this.state = 'room-complete';
     this.projectiles.forEach((projectile) => projectile.destroy());
     this.projectiles = [];
 
-    if (room.kind === 'boss') {
+    if (this.currentRoom.kind === 'boss') {
       this.finishRun(true);
       return;
     }
 
     const afterLevels = (): void => {
-      if (room.kind === 'elite') this.presentRelic(() => this.completeRoom());
+      if (this.currentRoom.kind === 'elite') this.presentRelic(() => this.completeRoom());
       else this.completeRoom();
     };
 
@@ -538,19 +544,13 @@ export class RogueliteGame {
       after();
       return;
     }
-
     const available = UPGRADE_CATALOG.filter((definition) => (this.upgradeLevels.get(definition.id) ?? 0) < definition.maxLevel);
-    const choices = this.rng.shuffle(available).slice(0, 3).map((definition) => ({
-      definition,
-      currentLevel: this.upgradeLevels.get(definition.id) ?? 0
-    }));
-
+    const choices = this.rng.shuffle(available).slice(0, 3).map((definition) => ({ definition, currentLevel: this.upgradeLevels.get(definition.id) ?? 0 }));
     if (choices.length === 0) {
       this.pendingLevels = 0;
       after();
       return;
     }
-
     this.state = 'choosing-upgrade';
     this.hud.showUpgrade(choices, (id) => {
       this.applyUpgrade(id);
@@ -566,12 +566,159 @@ export class RogueliteGame {
       after();
       return;
     }
-
     this.state = 'choosing-relic';
     this.hud.showRelic(choices, (id) => {
       this.applyRelic(id);
       after();
     });
+  }
+
+  private presentMerchant(): void {
+    this.state = 'merchant';
+    const price = 28 + this.depth * 4;
+    const healPrice = 20 + this.depth * 2;
+    const available = this.rng.shuffle(UPGRADE_CATALOG.filter((definition) => (this.upgradeLevels.get(definition.id) ?? 0) < definition.maxLevel)).slice(0, 2);
+    const options: DecisionOption[] = available.map((definition) => ({
+      id: `upgrade:${definition.id}`,
+      title: definition.name,
+      description: definition.description,
+      meta: `◆ ${price} · Lv.${(this.upgradeLevels.get(definition.id) ?? 0) + 1}`,
+      accent: definition.rarity === '稀有' ? 'violet' : 'gold',
+      disabled: this.coins < price
+    }));
+    options.push({
+      id: 'heal',
+      title: '购买灰烬药剂',
+      description: `恢复 ${Math.ceil(this.maxHealth * 0.35)} 点生命。`,
+      meta: `◆ ${healPrice}`,
+      accent: 'teal',
+      disabled: this.coins < healPrice || this.health >= this.maxHealth
+    });
+    options.push({ id: 'leave', title: '保留金币', description: '什么也不买，继续深入。', meta: '免费', accent: 'ember' });
+
+    this.hud.showDecision('灰烬交易 · WANDERING MERCHANT', this.currentRoom.title, `你持有 ◆ ${this.coins}。每次经过商店只能完成一笔交易。`, options, (id) => {
+      if (id.startsWith('upgrade:')) {
+        this.coins -= price;
+        this.applyUpgrade(id.slice('upgrade:'.length) as UpgradeId);
+      } else if (id === 'heal') {
+        this.coins -= healPrice;
+        const amount = Math.ceil(this.maxHealth * 0.35);
+        this.health = Math.min(this.maxHealth, this.health + amount);
+        this.message = `购买药剂 · 恢复 ${amount} 点生命`;
+      } else {
+        this.message = '没有交易 · 保留灰金币';
+      }
+      this.completeRoom();
+    });
+  }
+
+  private presentRest(): void {
+    this.state = 'resting';
+    const heal = Math.ceil(this.maxHealth * 0.42);
+    const options: DecisionOption[] = [
+      { id: 'recover', title: '守火休整', description: `恢复 ${heal} 点生命。`, meta: '稳妥', accent: 'teal', disabled: this.health >= this.maxHealth },
+      { id: 'forge', title: '重铸长枪', description: '本局普通攻击与技能伤害永久提高 10%。', meta: '进攻', accent: 'ember' },
+      { id: 'focus', title: '静默冥想', description: '立即充满伙伴协同，并重置技能与闪避冷却。', meta: '节奏', accent: 'violet' }
+    ];
+    this.hud.showDecision('营火 · LAST SAFE FLAME', this.currentRoom.title, '休息意味着放弃锻造；锻造意味着带伤继续前进。', options, (id) => {
+      if (id === 'recover') {
+        this.health = Math.min(this.maxHealth, this.health + heal);
+        this.message = `营火休整 · 恢复 ${heal} 点生命`;
+      } else if (id === 'forge') {
+        this.attackPower *= 1.1;
+        this.skillPower *= 1.1;
+        this.message = '重铸完成 · 伤害提高 10%';
+      } else {
+        this.synergy = this.companions.length > 0 ? 100 : 0;
+        this.skillTimer = 0;
+        this.dashTimer = 0;
+        this.message = '冥想完成 · 战斗节奏已重置';
+      }
+      this.completeRoom();
+    });
+  }
+
+  private presentEvent(): void {
+    this.state = 'event';
+    const eventIndex = this.rng.int(0, 2);
+    if (eventIndex === 0) {
+      const sacrifice = Math.max(14, Math.ceil(this.maxHealth * 0.18));
+      this.hud.showDecision(
+        '随机事件 · BLOOD ALTAR',
+        '仍在呼吸的祭台',
+        '祭台要求鲜血，而它背后的石匣里确实传来遗物的回响。',
+        [
+          { id: 'sacrifice', title: '献出鲜血', description: `失去 ${sacrifice} 点生命，随后获得一件遗物。`, meta: '高收益', accent: 'violet', disabled: this.health <= sacrifice + 1 },
+          { id: 'coins', title: '拆走祭器', description: '不触碰仪式，拿走可交易的金属部件。', meta: '获得 ◆ 30', accent: 'gold' },
+          { id: 'leave', title: '离开', description: '拒绝参与已经持续太久的仪式。', meta: '安全', accent: 'teal' }
+        ],
+        (id) => {
+          if (id === 'sacrifice') {
+            this.health = Math.max(1, this.health - sacrifice);
+            this.message = `祭台吞下 ${sacrifice} 点生命`;
+            this.presentRelic(() => this.completeRoom());
+          } else {
+            if (id === 'coins') this.coins += 30;
+            this.message = id === 'coins' ? '拆走祭器 · 获得 30 灰金币' : '你没有回应祭台';
+            this.completeRoom();
+          }
+        }
+      );
+      return;
+    }
+
+    if (eventIndex === 1) {
+      const price = 24;
+      this.hud.showDecision(
+        '随机事件 · ASH WELL',
+        '灰烬井',
+        '井底有微弱蓝光，水面映出的却不是你的脸。',
+        [
+          { id: 'drink', title: '饮用井水', description: `恢复 ${Math.ceil(this.maxHealth * 0.3)} 点生命。`, meta: '恢复', accent: 'teal', disabled: this.health >= this.maxHealth },
+          { id: 'offer', title: '投入灰金币', description: '支付 24 灰金币，最大生命永久提高 16。', meta: '永久成长', accent: 'gold', disabled: this.coins < price },
+          { id: 'leave', title: '封上井口', description: '什么都不拿，避免未知代价。', meta: '安全', accent: 'ember' }
+        ],
+        (id) => {
+          if (id === 'drink') {
+            const amount = Math.ceil(this.maxHealth * 0.3);
+            this.health = Math.min(this.maxHealth, this.health + amount);
+            this.message = `灰烬井 · 恢复 ${amount} 点生命`;
+          } else if (id === 'offer') {
+            this.coins -= price;
+            this.maxHealth += 16;
+            this.health += 16;
+            this.message = '井水回应了供奉 · 最大生命 +16';
+          } else this.message = '你封住了井口';
+          this.completeRoom();
+        }
+      );
+      return;
+    }
+
+    this.hud.showDecision(
+      '随机事件 · FACELESS PACT',
+      '无面使者',
+      '使者愿意把未来的一部分力量提前交给你，但它从不做无偿交易。',
+      [
+        { id: 'power', title: '接受灼印', description: '最大生命降低 14，但所有伤害永久提高 15%。', meta: '高风险', accent: 'violet', disabled: this.maxHealth <= 90 },
+        { id: 'gold', title: '出售一段记忆', description: '获得 45 灰金币，但立刻失去 18 点生命。', meta: '经济', accent: 'gold', disabled: this.health <= 19 },
+        { id: 'leave', title: '拒绝契约', description: '保留现在的自己。', meta: '安全', accent: 'teal' }
+      ],
+      (id) => {
+        if (id === 'power') {
+          this.maxHealth -= 14;
+          this.health = Math.min(this.health, this.maxHealth);
+          this.attackPower *= 1.15;
+          this.skillPower *= 1.15;
+          this.message = '无面灼印 · 最大生命 -14，伤害 +15%';
+        } else if (id === 'gold') {
+          this.health -= 18;
+          this.coins += 45;
+          this.message = '记忆被取走 · 获得 45 灰金币';
+        } else this.message = '你拒绝了无面使者';
+        this.completeRoom();
+      }
+    );
   }
 
   private applyUpgrade(id: UpgradeId): void {
@@ -587,23 +734,15 @@ export class RogueliteGame {
     } else if (id === 'haste') {
       this.moveSpeed *= 1.1;
       this.skillCooldownScale *= 0.92;
-    } else if (id === 'reach') {
-      this.attackRangeScale *= 1.14;
-    } else if (id === 'dash') {
-      this.dashCooldownScale *= 0.86;
-    } else if (id === 'critical') {
-      this.critChance += 0.08;
-    } else if (id === 'focus') {
-      this.skillPower *= 1.24;
-    } else if (id === 'guard') {
-      this.damageReduction += 0.07;
-    } else if (id === 'recovery') {
-      this.healOnKill += 2;
-    } else if (id === 'fury') {
-      this.attackCooldownScale *= 0.91;
-    } else if (id === 'fortune') {
-      this.coinMultiplier *= 1.25;
-    } else if (id === 'surge') {
+    } else if (id === 'reach') this.attackRangeScale *= 1.14;
+    else if (id === 'dash') this.dashCooldownScale *= 0.86;
+    else if (id === 'critical') this.critChance += 0.08;
+    else if (id === 'focus') this.skillPower *= 1.24;
+    else if (id === 'guard') this.damageReduction += 0.07;
+    else if (id === 'recovery') this.healOnKill += 2;
+    else if (id === 'fury') this.attackCooldownScale *= 0.91;
+    else if (id === 'fortune') this.coinMultiplier *= 1.25;
+    else if (id === 'surge') {
       this.skillPower *= 1.1;
       this.attackRangeScale *= 1.18;
     }
@@ -620,15 +759,10 @@ export class RogueliteGame {
   }
 
   private unlockCompanion(): string | null {
-    const roomNumber = this.roomIndex + 1;
-    const unlocks: Partial<Record<number, CompanionKind>> = {
-      2: 'archer',
-      3: 'guardian',
-      4: 'support'
-    };
+    const roomNumber = this.depth + 1;
+    const unlocks: Partial<Record<number, CompanionKind>> = { 2: 'archer', 5: 'guardian', 8: 'support' };
     const kind = unlocks[roomNumber];
     if (!kind || this.companions.some((companion) => companion.kind === kind)) return null;
-
     const companion = new Companion(this.app, kind, this.player.getPosition().clone());
     this.companions.push(companion);
     this.synergy = Math.max(this.synergy, 35);
@@ -636,8 +770,7 @@ export class RogueliteGame {
   }
 
   private completeRoom(): void {
-    const nextRoom = this.rooms[this.roomIndex + 1];
-    if (!nextRoom) {
+    if (this.depth >= this.route.length - 1) {
       this.finishRun(true);
       return;
     }
@@ -645,27 +778,36 @@ export class RogueliteGame {
     const unlocked = this.unlockCompanion();
     this.state = 'room-complete';
     const unlockedText = unlocked ? `伙伴「${unlocked}」已加入队伍。` : '';
-    const detail = `${unlockedText} 当前等级 ${this.level}，金币 ${this.coins}。下一关：${nextRoom.title}`.trim();
-    this.hud.showRoomComplete((this.rooms[this.roomIndex] as RoomDefinition).title, detail, () => this.enterRoom(this.roomIndex + 1));
+    const detail = `${unlockedText} 当前等级 ${this.level}，灰金币 ${this.coins}。前方命数已经分岔。`.trim();
+    this.hud.showRoomComplete(this.currentRoom.title, detail, () => this.presentRouteChoice());
+  }
+
+  private presentRouteChoice(): void {
+    const nextDepth = this.depth + 1;
+    const choices = this.route[nextDepth];
+    if (!choices || choices.length === 0) {
+      this.finishRun(true);
+      return;
+    }
+    this.state = 'choosing-route';
+    this.hud.showRoute(this.route, this.depth, this.visitedRoomIds, choices, (id) => {
+      const selected = choices.find((choice) => choice.id === id);
+      if (!selected) return;
+      this.enterRoom(selected, nextDepth);
+    });
   }
 
   private finishRun(victory: boolean): void {
     if (this.state === 'won' || this.state === 'lost') return;
     this.health = Math.max(0, this.health);
     this.state = victory ? 'won' : 'lost';
-    const profile = this.profile.finishRun({
-      victory,
-      room: this.roomIndex + 1,
-      kills: this.kills,
-      level: this.level,
-      coins: this.coins
-    });
-
+    const profile = this.profile.finishRun({ victory, room: this.depth + 1, kills: this.kills, level: this.level, coins: this.coins });
     this.hud.showResult(
       victory,
       {
         seed: this.seedLabel,
-        room: this.roomIndex + 1,
+        room: this.depth + 1,
+        roomCount: this.route.length,
         kills: this.kills,
         level: this.level,
         coins: this.coins,
@@ -681,9 +823,7 @@ export class RogueliteGame {
   }
 
   private clearCombatEntities(): void {
-    for (const enemy of this.enemies) {
-      if (enemy.alive) enemy.entity.destroy();
-    }
+    for (const enemy of this.enemies) if (enemy.alive) enemy.entity.destroy();
     for (const projectile of this.projectiles) projectile.destroy();
     this.enemies = [];
     this.projectiles = [];
