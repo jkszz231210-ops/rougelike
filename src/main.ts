@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import './style.css';
 import { ArtDirectionDirector } from './game/artDirection';
+import { installArenaExpansion } from './game/arenaExpansion';
 import { RogueliteGame } from './game/game';
 import { RemoteAssetDirector } from './game/remoteAssets';
 
@@ -22,6 +23,7 @@ app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
 app.start();
 
 window.addEventListener('resize', () => app.resizeCanvas());
+installArenaExpansion(app);
 new RogueliteGame(app, canvas, hudRoot);
 new ArtDirectionDirector(app);
 new RemoteAssetDirector(app);
