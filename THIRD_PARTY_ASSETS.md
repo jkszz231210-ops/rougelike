@@ -1,6 +1,6 @@
 # Third-party runtime assets
 
-Emberfall V0.4 loads the following public KayKit assets at runtime through jsDelivr. They are intentionally kept external so the repository stays lightweight while the real-model pipeline is being validated.
+Emberfall V0.5 loads the following public KayKit assets at runtime through jsDelivr. They are intentionally kept external so the repository stays lightweight while the real-model pipeline is being validated.
 
 ## KayKit Character Pack: Adventurers
 
@@ -21,6 +21,7 @@ Emberfall V0.4 loads the following public KayKit assets at runtime through jsDel
 - Source: https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
 - Creator: Kay Lousberg / KayKit
 - License: Creative Commons Zero (CC0 1.0 Universal)
-- Planned/active usage: modular dungeon props and environment replacement assets.
+- Active usage: modular pillar, decorated pillar, lit torch, gated wall, patterned banner and chest GLB props used across the ten-room environment progression.
+- Runtime fallback: each remote prop keeps a lightweight procedural stand-in until the GLB has loaded, and retains the fallback if loading fails.
 
 Attribution is not required by the source license. This file is retained for provenance, auditing and future asset-pipeline maintenance.
