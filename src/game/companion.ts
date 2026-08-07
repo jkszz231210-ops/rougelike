@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { Enemy } from './enemy';
-import { createMaterial, createPrimitive, flashEntity } from './visuals';
+import { createChildPrimitive, createMaterial, createPrimitive, flashEntity } from './visuals';
 
 export type CompanionKind = 'archer' | 'guardian' | 'support';
 
@@ -30,21 +30,24 @@ export class Companion {
     this.name = COMPANION_NAMES[kind];
     const material = createMaterial(
       kind === 'archer'
-        ? new pc.Color(0.08, 0.42, 0.36)
+        ? new pc.Color(0.055, 0.35, 0.3)
         : kind === 'guardian'
-          ? new pc.Color(0.48, 0.28, 0.08)
-          : new pc.Color(0.32, 0.22, 0.56),
-      kind === 'support' ? new pc.Color(0.12, 0.05, 0.3) : undefined
+          ? new pc.Color(0.42, 0.23, 0.065)
+          : new pc.Color(0.28, 0.18, 0.5),
+      kind === 'support' ? new pc.Color(0.1, 0.04, 0.28) : undefined,
+      0.16,
+      0.44
     );
     const primitive = kind === 'guardian' ? 'box' : kind === 'archer' ? 'cylinder' : 'sphere';
     const scale = kind === 'guardian'
-      ? new pc.Vec3(1.25, 1.65, 1.25)
+      ? new pc.Vec3(1.15, 1.48, 1.15)
       : kind === 'archer'
-        ? new pc.Vec3(0.85, 1.45, 0.85)
-        : new pc.Vec3(0.95, 0.95, 0.95);
+        ? new pc.Vec3(0.78, 1.3, 0.78)
+        : new pc.Vec3(0.88, 0.88, 0.88);
     const start = playerPosition.clone().add(FOLLOW_OFFSETS[kind]);
     start.set(start.x, kind === 'support' ? 1.15 : 0.82, start.z);
     this.entity = createPrimitive(app, `companion-${kind}`, primitive, material, start, scale);
+    this.decorate();
   }
 
   update(
@@ -128,5 +131,24 @@ export class Companion {
       }
     }
     return nearest;
+  }
+
+  private decorate(): void {
+    const pale = createMaterial(new pc.Color(0.74, 0.69, 0.61), undefined, 0.02, 0.25);
+    const metal = createMaterial(new pc.Color(0.12, 0.13, 0.14), undefined, 0.5, 0.48);
+    const glow = createMaterial(new pc.Color(0.45, 0.3, 0.75), new pc.Color(0.2, 0.08, 0.48));
+
+    if (this.kind === 'support') {
+      createChildPrimitive(this.entity, 'support-core', 'sphere', glow, new pc.Vec3(0, 0, 0), new pc.Vec3(0.38, 0.38, 0.38));
+      createChildPrimitive(this.entity, 'support-halo', 'cylinder', metal, new pc.Vec3(0, 0.78, 0), new pc.Vec3(0.76, 0.06, 0.76));
+      return;
+    }
+
+    createChildPrimitive(this.entity, `${this.kind}-head`, 'sphere', pale, new pc.Vec3(0, 0.84, 0), new pc.Vec3(0.48, 0.48, 0.48));
+    if (this.kind === 'archer') {
+      createChildPrimitive(this.entity, 'archer-bow', 'cylinder', metal, new pc.Vec3(-0.68, 0.12, -0.08), new pc.Vec3(0.08, 1.05, 0.08), new pc.Vec3(0, 0, -18));
+    } else {
+      createChildPrimitive(this.entity, 'guardian-shield', 'box', metal, new pc.Vec3(0.72, 0.05, -0.08), new pc.Vec3(0.2, 0.92, 0.72));
+    }
   }
 }
